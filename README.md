@@ -9,8 +9,8 @@ Feel free to update the README with other useful sources along the way!
 - [torchaudio](https://github.com/pytorch/audio)
 
 ## Interesting challenges
-- [dcase](http://dcase.community/challenge2021/)
-- [few-shot bioacoustic event detection](http://dcase.community/challenge2021/task-few-shot-bioacoustic-event-detection)
+- [Detection and classification of acoustic scenes and events](http://dcase.community/challenge2021/)
+- [Few-shot bioacoustic event detection](http://dcase.community/challenge2021/task-few-shot-bioacoustic-event-detection)
 
 ## Interesting papers
 - [Sound Event Detection: A Tutorial](https://arxiv.org/abs/2107.05463)
