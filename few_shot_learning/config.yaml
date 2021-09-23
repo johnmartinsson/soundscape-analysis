@@ -1,0 +1,19 @@
+set:
+  train: true
+
+path:
+  data_train: C:\Users\marti\Documents\playground\data\small
+  train_w: C:\Users\marti\Documents\playground\data\hfiles
+
+features:
+  raw: true
+  raw_pad: 123.456
+  seg_len: 0.200
+  hop_seg: 0.050
+  eps: 2.220446049250313e-16
+  fmax: 11025
+  fmin: 50
+  sr: 22050
+  n_fft: 1024
+  n_mels: 128
+  hop_mel: 256
