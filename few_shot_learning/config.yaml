@@ -1,12 +1,22 @@
+
+#As the scope of the code grows there is most likely need to get more
+#organized when it comes to paths/file names/h5 datasets.
+
 set:
   train: true
 
 path:
   data_train: C:\Users\marti\Documents\playground\data\small
+  data_test: ''
   train_w: C:\Users\marti\Documents\playground\data\hfiles
+  test_w: ''
+
+  #Something for model paths.
+  #Should be able to save and load models.
+  #Load just for testing on a new set etc...
 
 features:
-  raw: true
+  raw: false
   raw_pad: 123.456
   seg_len: 0.200
   hop_seg: 0.050
@@ -17,3 +27,12 @@ features:
   n_fft: 1024
   n_mels: 128
   hop_mel: 256
+
+datagen:
+  raw: false
+  normalize: true
+  transpose: true
+  balance: true
+  ltoi: true
+  stratify: true
+  random_state: 42
