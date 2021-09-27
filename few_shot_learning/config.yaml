@@ -4,6 +4,7 @@
 
 set:
   train: true
+  device: cpu
 
 path:
   data_train: C:\Users\marti\Documents\playground\data\small
