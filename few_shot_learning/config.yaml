@@ -3,14 +3,19 @@
 #organized when it comes to paths/file names/h5 datasets.
 
 set:
+  features: true
   train: true
   device: cpu
 
+#TODO fix root path stuff, check dcase
 path:
-  data_train: C:\Users\marti\Documents\playground\data\small
-  data_test: ''
-  train_w: C:\Users\marti\Documents\playground\data\hfiles
-  test_w: ''
+  root: /home/martin/data/dcase
+  data_train: /home/martin/data/dcase/small
+  data_test: /home/martin/data/dcase/small_test
+  train_w: /home/martin/data/dcase/hfiles/train
+  test_w: /home/martin/data/dcase/hfiles/test
+  best_model: /home/martin/data/dcase/models/best_model.pth
+  last_model: /home/martin/data/dcase/models/last_model.pth
 
   #Something for model paths.
   #Should be able to save and load models.
@@ -37,3 +42,20 @@ datagen:
   ltoi: true
   stratify: true
   random_state: 42
+
+train:
+  num_classes: 15
+  n_shot: 5
+  n_query: 5
+  k_way : 2
+  lr_rate: 0.0001
+  scheduler_gamma: 0.5
+  scheduler_step_size: 10
+  epochs: 15
+
+eval:
+  samples_neg: 650 #Introduce number for 'all', ex -1
+  iterations: 3
+  query_batch_size: 8
+  negative_set_batch_size : 16
+  p_thresh: 0.5
