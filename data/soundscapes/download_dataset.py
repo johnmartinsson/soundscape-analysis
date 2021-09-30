@@ -28,28 +28,28 @@ if __name__ == '__main__':
     
     data = pd.read_csv('data.csv')
 
-    for i, row in data.iterrows():
-        print(row)
-        print(row['youtube-url'])
-        sub_directory = get_subdirectory(row)
-        audio_id = row['youtube-url'].split('?v=')[1]
-        output_file = '{}.wav'.format(audio_id)
-        print(output_file)
-        download_audio(row['youtube-url'], os.path.join(sub_directory, output_file))
+#    for i, row in data.iterrows():
+#        print(row)
+#        print(row['youtube-url'])
+#        sub_directory = get_subdirectory(row)
+#        audio_id = row['youtube-url'].split('?v=')[1]
+#        output_file = '{}.wav'.format(audio_id)
+#        print(output_file)
+#        download_audio(row['youtube-url'], os.path.join(sub_directory, output_file))
 
-    #ydl_opts = {
-    #    'format': 'bestaudio/best',
-    #    'postprocessors': [{
-    #        'key': 'FFmpegExtractAudio',
-    #        'preferredcodec': 'wav',
-    #        'preferredquality': '192'
-    #    }],
-    #    'postprocessor_args': [
-    #        '-ar', '22050'
-    #    ],
-    #    'prefer_ffmpeg': True,
-    #    'keepvideo': False
-    #}
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'wav',
+            'preferredquality': '192'
+        }],
+        'postprocessor_args': [
+            '-ar', '22050'
+        ],
+        'prefer_ffmpeg': True,
+        'keepvideo': False
+    }
 
-    #with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-    #    ydl.download(data['youtube-url'])
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        ydl.download(data['youtube-url'])
