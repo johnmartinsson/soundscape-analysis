@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from tqdm import tqdm
 
 def time_2_frame(df,fps):
 
@@ -225,3 +226,20 @@ def evaluate_prototypes(conf=None,hdf_eval=None,device= None,strt_index_query=No
 
     assert len(onset) == len(offset)
     return onset, offset
+
+def get_dataloaders(config):
+
+    #Either create(extract features from .wav/csv) or open h5 files
+    #Flag in config for "creating" features
+    #Path in config to h5 files
+
+    #Create instance of Datagen -> X_tr, Y_tr, X_val, Y_val, X_pos, X_neg, X_query
+
+    #Create instance of BatchSampler
+    #Config -> Random/Active
+
+    #Create torch DataLoaders TrainLoader, ValLodaer, TestLoader
+
+    #return loaders
+
+

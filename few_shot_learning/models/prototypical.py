@@ -32,3 +32,6 @@ def conv_block(in_channels,out_channels):
         nn.ReLU(),
         nn.MaxPool2d(2)
     )
+
+def load(config):
+    return Protonet()
