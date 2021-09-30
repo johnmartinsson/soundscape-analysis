@@ -1,0 +1,68 @@
+
+#As the scope of the code grows there is most likely need to get more
+#organized when it comes to paths/file names/h5 datasets.
+
+set:
+  features: true
+  train: true
+  device: cuda
+
+#TODO fix root path stuff, check dcase
+path:
+  #root: /home/martin/data/dcase
+  root: C:\Users\martin\Documents\playground
+  #data_train: /home/martin/data/dcase/small
+  data_train: C:\Users\martin\Documents\playground\data\train
+  #data_test: /home/martin/data/dcase/small_test
+  data_test: C:\Users\martin\Documents\playground\data\test
+  #train_w: /home/martin/data/dcase/hfiles/train
+  train_w: C:\Users\martin\Documents\playground\data\hfiles\train
+  #test_w: /home/martin/data/dcase/hfiles/test
+  test_w: C:\Users\martin\Documents\playground\data\hfiles\test
+  #best_model: /home/martin/data/dcase/models/best_model.pth
+  best_model: C:\Users\martin\Documents\playground\data\models\best_model.pth
+  #last_model: /home/martin/data/dcase/models/last_model.pth
+  last_model: C:\Users\martin\Documents\playground\data\models\last_model.pth
+
+  #Something for model paths.
+  #Should be able to save and load models.
+  #Load just for testing on a new set etc...
+
+features:
+  raw: false
+  raw_pad: 123.456
+  seg_len: 0.200
+  hop_seg: 0.050
+  eps: 2.220446049250313e-16
+  fmax: 11025
+  fmin: 50
+  sr: 22050
+  n_fft: 1024
+  n_mels: 128
+  hop_mel: 256
+
+datagen:
+  raw: false
+  normalize: true
+  transpose: true
+  balance: true
+  ltoi: true
+  stratify: true
+  random_state: 42
+
+train:
+  num_classes: 15
+  n_shot: 5
+  n_query: 5
+  k_way : 10
+  lr_rate: 0.0001
+  scheduler_gamma: 0.5
+  scheduler_step_size: 10
+  epochs: 15
+
+eval:
+  samples_neg: 650 #Introduce number for 'all', ex -1
+  iterations: 3
+  query_batch_size: 8
+  negative_set_batch_size : 16
+  p_thresh: 0.5
