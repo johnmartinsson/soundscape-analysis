@@ -3,6 +3,7 @@ import h5py
 import numpy as np
 import os
 from sklearn.model_selection import train_test_split
+import datasets.dcase_few_shot_bioacoustic as util
 
 #Relative import again
 
@@ -21,11 +22,11 @@ class Datagen():
             self.x = hf['features'][:]
             self.labels = [s.decode() for s in hf['labels'][:]]
             if config.datagen.ltoi:
-                self.y = class_to_int(self.labels)
+                self.y = util.class_to_int(self.labels)
             else:
                 self.y = self.labels
             if config.datagen.balance:
-                self.x, self.y = balance_class_distribution(self.x, self.y)
+                self.x, self.y = util.balance_class_distribution(self.x, self.y)
             
             array_train = np.arange(len(self.x))
             if config.datagen.stratify:
@@ -36,7 +37,7 @@ class Datagen():
             self.train_index = train_array
             self.valid_index = valid_array
             if config.datagen.normalize:
-                self.mean, self.std = norm_params(self.x[train_array])
+                self.mean, self.std = util.norm_params(self.x[train_array])
             else:
                 self.mean = None
                 self.std = None

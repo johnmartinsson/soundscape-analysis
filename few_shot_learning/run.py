@@ -13,6 +13,8 @@ import numpy as np
 
 import utils
 
+#Perhaps we should consider moving over to hydra?
+
 def main(yaml_filepath, mode):
     """Run experiments."""
     cfgs = utils.load_cfgs(yaml_filepath)
@@ -36,8 +38,12 @@ def main(yaml_filepath, mode):
 
         model = module_model.load(cfg['model'])
         #Should perhaps load different loaders depending on the mode
-        train_loader, val_loader, test_loader = module_dataset.get_dataloaders(cfg['dataset'])
-        optimizer = module_optimizer.load(cfg['optimizer'], model)
+        if mode == 'train':
+            train_loader, val_loader = module_dataset.get_dataloaders_train(cfg)
+        if mode == 'evaluate':
+            test_loader = module_dataset.get_dataloaders_test(cfg)
+        #train_loader, val_loader, test_loader = module_dataset.get_dataloaders(cfg['dataset'])
+        optimizer = module_optimizer.load(cfg, model)
         loss_function = module_loss_function.load()
         train_function = module_train.load()
         eval_function = module_eval.load()
@@ -51,16 +57,6 @@ def main(yaml_filepath, mode):
         # evaluation mode
         if mode == 'evaluate':
             eval_function(model, test_loader, cfg)
-
-def train(model, optimizer, loss_function, x_train, y_train, x_valid, y_valid, cfg):
-    model.train()
-
-    return model
-
-def evaluate(model, x_test, y_test, cfg):
-    model.eval()
-
-    return
 
 
 if __name__ == '__main__':

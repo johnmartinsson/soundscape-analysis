@@ -1,4 +1,5 @@
 import torch
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import numpy as np
 
@@ -59,10 +60,16 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config):
     best_val_acc = 0.0
     model.to(device)
     
+    num_batches_tr = len(train_loader)
+    num_batches_val = len(val_loader)
+
+    writer = SummaryWriter(log_dir=config.train.artifacts_path)
+
     for epoch in range(num_epochs):
         
         print('Epoch {}'.format(epoch))
         train_iterator = iter(train_loader)
+        batch_nr = 0
         for batch in tqdm(train_iterator):
             optim.zero_grad()
             model.train()
@@ -77,12 +84,25 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config):
             train_loss.append(tr_loss.item())
             train_acc.append(tr_acc.item())
             
+            #Did not end up like i wanted it to.
+            #Wanted to plot the loss/acc per batch in an epoch.
+            #Instead got every batch as a separate card.
+            #Also it overwrites every epoch
+
+            #writer.add_scalar('Loss/Batch'+str(batch_nr), tr_loss, batch_nr)
+            #writer.add_scalar('Accuracy/Batch'+str(batch_nr), tr_loss, batch_nr)
+
+            batch_nr += 1
+
             tr_loss.backward()
             optim.step()
             
-        #avg_loss_tr = np.mean(train_loss[-num_batches_tr:])
-        #avg_acc_tr = np.mean(train_acc[-num_batches_tr:])
+        avg_loss_tr = np.mean(train_loss[-num_batches_tr:])
+        avg_acc_tr = np.mean(train_acc[-num_batches_tr:])
         print('Average train loss: {}  Average training accuracy: {}'.format(avg_loss_tr,avg_acc_tr))
+
+        writer.add_scalar('Loss/train', avg_loss_tr, epoch)
+        writer.add_scalar('Accuracy/train', avg_acc_tr, epoch)
         
         lr_scheduler.step()
         
@@ -97,8 +117,11 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config):
             valid_loss, valid_acc = loss_function(x_val, y, config.train.n_shot)
             val_loss.append(valid_loss.item())
             val_acc.append(valid_acc.item())
-        #avg_loss_val = np.mean(val_loss[-num_batches_val:])
-        #avg_acc_val = np.mean(val_acc[-num_batches_val:])
+        avg_loss_val = np.mean(val_loss[-num_batches_val:])
+        avg_acc_val = np.mean(val_acc[-num_batches_val:])
+
+        writer.add_scalar('Loss/val', avg_loss_val, epoch)
+        writer.add_scalar('Accuracy/val', avg_acc_val, epoch)
         
         print ('Epoch {}, Validation loss {:.4f}, Validation accuracy {:.4f}'.format(epoch,avg_loss_val,avg_acc_val))
         if avg_acc_val > best_val_acc:

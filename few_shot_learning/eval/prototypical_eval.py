@@ -8,7 +8,7 @@ import h5py
 import csv
 
 #Do we like this relative import?
-from ..datasets import dcase_few_shot_bioacoustic as util
+import datasets.dcase_few_shot_bioacoustic as util
 
 def eval(model, test_loader, config):
     
@@ -38,8 +38,10 @@ def eval(model, test_loader, config):
         offset_arr = np.append(offset_arr,offset)
 
     df_out = pd.DataFrame({'Audiofilename':name_arr,'Starttime':onset_arr,'Endtime':offset_arr})
-    csv_path = os.path.join(config.path.root,'Eval_out.csv')
+    csv_path = os.path.join(config.root_path,'Eval_out.csv')
     df_out.to_csv(csv_path,index=False)
+
+
 
 def dummy_choice(csv, n_shots):
     events = []

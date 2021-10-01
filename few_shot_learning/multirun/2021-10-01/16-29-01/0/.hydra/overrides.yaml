@@ -1,0 +1,5 @@
+- root_path=/home/willbo/repos/soundscape-analysis/few_shot_learning
+- set.features=False
+- set.train=True
+- set.eval=False
+- train.k_way=10

@@ -3,6 +3,7 @@ import os
 import importlib.util
 import copy
 import yaml
+import logging
 
 def load_module(script_path):
     spec = importlib.util.spec_from_file_location("module.name", script_path)

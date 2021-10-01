@@ -1,7 +1,7 @@
 import torch
 from torch.nn import functional as F
 
-import util
+import datasets.dcase_few_shot_bioacoustic as util
 
 def prototypical_loss(input, target, n_support, supp_idxs=None):
     

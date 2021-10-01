@@ -6,6 +6,7 @@ import numpy as np
 import h5py
 from itertools import chain
 import pandas as pd
+import datasets.dcase_few_shot_bioacoustic as util
 
 class FeatureExtractor(abc.ABC):
     
@@ -46,7 +47,7 @@ class SpectralFeatureExtractor(FeatureExtractor):
             df = pd.read_csv(file, header=0, index_col=False)
             df_pos = df[(df == 'POS').any(axis=1)]
             
-            start_time, end_time = time_2_frame(df_pos, fps)
+            start_time, end_time = util.time_2_frame(df_pos, fps)
             label_f = list(chain.from_iterable(
                 [df_pos.columns[(df_pos == 'POS').loc[index]].values for index, _ in df_pos.iterrows()]))
             
@@ -139,7 +140,7 @@ class SpectralFeatureExtractor(FeatureExtractor):
             df_eval = pd.read_csv(file, header=0, index_col=False)
             Q_list = df_eval['Q'].to_numpy()
 
-            start_time,end_time = time_2_frame(df_eval,fps)
+            start_time,end_time = util.time_2_frame(df_eval,fps)
 
             index_sup = np.where(Q_list == 'POS')[0][:self.config.train.n_shot]
 

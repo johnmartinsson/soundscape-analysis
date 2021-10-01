@@ -34,4 +34,5 @@ def conv_block(in_channels,out_channels):
     )
 
 def load(config):
+    print('load model')
     return Protonet()

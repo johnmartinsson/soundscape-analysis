@@ -1,6 +1,12 @@
 import numpy as np
 import torch
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.over_sampling import SMOTE
 from tqdm import tqdm
+import datasets.feature_extract as fe
+import datasets.randomepisode as re
+import datasets.data_gen as dg
+import models.prototypical as pt
 
 def time_2_frame(df,fps):
 
@@ -130,7 +136,7 @@ def evaluate_prototypes(conf=None,hdf_eval=None,device= None,strt_index_query=No
       """
     hop_seg = int(conf.features.hop_seg * conf.features.sr // conf.features.hop_mel)
 
-    gen_eval = TestDatagen(hdf_eval,conf)
+    gen_eval = dg.TestDatagen(hdf_eval,conf)
     X_pos, X_neg,X_query = gen_eval.generate_eval()
 
     X_pos = torch.tensor(X_pos)
@@ -147,7 +153,7 @@ def evaluate_prototypes(conf=None,hdf_eval=None,device= None,strt_index_query=No
     query_set_feat = torch.zeros(0,1024).cpu()
 
 
-    Model = Protonet()
+    Model = pt.Protonet()
 
     if device == 'cpu':
         Model.load_state_dict(torch.load(conf.path.best_model, map_location=torch.device('cpu')))
@@ -170,7 +176,7 @@ def evaluate_prototypes(conf=None,hdf_eval=None,device= None,strt_index_query=No
         neg_dataset = torch.utils.data.TensorDataset(X_neg, Y_neg)
         negative_loader = torch.utils.data.DataLoader(dataset=neg_dataset, batch_sampler=None, batch_size=batch_size_neg)
 
-        batch_samplr_pos = RandomEpisodicSampler(Y_pos, num_batch_query + 1, 1, conf.train.n_shot, conf.train.n_query)
+        batch_samplr_pos = re.RandomEpisodicSampler(Y_pos, num_batch_query + 1, 1, conf.train.n_shot, conf.train.n_query)
         pos_dataset = torch.utils.data.TensorDataset(X_pos, Y_pos)
         pos_loader = torch.utils.data.DataLoader(dataset=pos_dataset, batch_sampler=batch_samplr_pos)
 
@@ -227,19 +233,65 @@ def evaluate_prototypes(conf=None,hdf_eval=None,device= None,strt_index_query=No
     assert len(onset) == len(offset)
     return onset, offset
 
-def get_dataloaders(config):
+def get_dataloaders_train(config):
 
-    #Either create(extract features from .wav/csv) or open h5 files
-    #Flag in config for "creating" features
-    #Path in config to h5 files
+    print('get_dataloaders')
 
-    #Create instance of Datagen -> X_tr, Y_tr, X_val, Y_val, X_pos, X_neg, X_query
+    if config.set.features:
+        print('Setting features')
+        if config.features.raw:
+            feature_extractor = fe.RawFeatureExtractor(config)
+        else:
+            feature_extractor = fe.SpectralFeatureExtractor(config)
+        
+        feature_extractor.extract_train()
 
-    #Create instance of BatchSampler
-    #Config -> Random/Active
+    datagen = dg.Datagen(config)
+    X_train, Y_train, X_val, Y_val = datagen.generate_train()
 
-    #Create torch DataLoaders TrainLoader, ValLodaer, TestLoader
+    X_tr = torch.tensor(X_train)
+    Y_tr = torch.LongTensor(Y_train)
+    X_val = torch.tensor(X_val)
+    Y_val = torch.LongTensor(Y_val)
 
-    #return loaders
+    samples_per_cls = config.train.n_shot + config.train.n_query
+    batch_size_tr = samples_per_cls * config.train.k_way
+    batch_size_vd = batch_size_tr
+    num_batches_tr = len(Y_train)//batch_size_tr
+    num_batches_vd = len(Y_val)//batch_size_vd
 
+    if config.train.sampler == 'random':
+        tr_sampler = re.RandomEpisodicSampler(Y_train, num_batches_tr, config.train.k_way,
+        config.train.n_shot, config.train.n_query)
+        val_sampler = re.RandomEpisodicSampler(Y_val, num_batches_vd, config.train.k_way,
+        config.train.n_shot, config.train.n_query)
 
+    if config.train.sampler == 'active':
+        pass
+
+    train_set = torch.utils.data.TensorDataset(X_tr, Y_tr)
+    val_set = torch.utils.data.TensorDataset(X_val, Y_val)
+
+    train_loader = torch.utils.data.DataLoader(dataset=train_set, batch_sampler=tr_sampler, num_workers=0,
+    pin_memory=True, shuffle=False)
+    val_loader = torch.utils.data.DataLoader(dataset=val_set, batch_sampler=val_sampler, num_workers=0,
+    pin_memory=True, shuffle=False)
+
+    return train_loader, val_loader
+
+#For the dcase acoustic this can just probably return None
+#Handles data loading differently for eval
+#Check prototypical_eval.py
+def get_dataloaders_test(config):
+    
+    return None
+    '''
+    if config.set.features:
+        print('Setting features')
+        if config.features.raw:
+            feature_extractor = fe.RawFeatureExtractor(config)
+        else:
+            feature_extractor = fe.SpectralFeatureExtractor(config)
+        
+        feature_extractor.extract_test()
+    '''
