@@ -13,30 +13,30 @@ class Datagen():
         
         self.config = config
         
-        if config.features.raw:
+        if config.experiment.features.raw:
             #These obviosly requires more processing down the pipe but that is application dependent.
             #Leave be for now
-            hf = h5py.File(os.path.join(config.path.train_w, 'raw_train.h5'))
+            hf = h5py.File(os.path.join(config.experiment.path.train_w, 'raw_train.h5'))
         else:
-            hf = h5py.File(os.path.join(config.path.train_w, 'mel_train.h5'))
+            hf = h5py.File(os.path.join(config.experiment.path.train_w, 'mel_train.h5'))
             self.x = hf['features'][:]
             self.labels = [s.decode() for s in hf['labels'][:]]
-            if config.datagen.ltoi:
+            if config.experiment.datagen.ltoi:
                 self.y = util.class_to_int(self.labels)
             else:
                 self.y = self.labels
-            if config.datagen.balance:
+            if config.experiment.datagen.balance:
                 self.x, self.y = util.balance_class_distribution(self.x, self.y)
             
             array_train = np.arange(len(self.x))
-            if config.datagen.stratify:
-                _,_,_,_,train_array,valid_array = train_test_split(self.x, self.y, array_train,                                                     random_state=config.datagen.random_state, stratify=self.y)
+            if config.experiment.datagen.stratify:
+                _,_,_,_,train_array,valid_array = train_test_split(self.x, self.y, array_train,                                                     random_state=config.seed, stratify=self.y)
             else:
-                _,_,_,_,train_array,valid_array = train_test_split(self.x, self.y, array_train,                                                     random_state=config.datagen.random_state)
+                _,_,_,_,train_array,valid_array = train_test_split(self.x, self.y, array_train,                                                     random_state=config.seed)
                 
             self.train_index = train_array
             self.valid_index = valid_array
-            if config.datagen.normalize:
+            if config.experiment.datagen.normalize:
                 self.mean, self.std = util.norm_params(self.x[train_array])
             else:
                 self.mean = None
@@ -52,7 +52,7 @@ class Datagen():
         Y_train = self.y[train_array]
         X_val = self.x[valid_array]
         Y_val = self.y[valid_array]
-        if self.config.datagen.normalize:
+        if self.config.experiment.datagen.normalize:
             X_train = self.feature_scale(X_train)
             X_val = self.feature_scale(X_val)
         return X_train, Y_train, X_val, Y_val
@@ -76,7 +76,7 @@ class TestDatagen(Datagen):
         X_pos = self.hfile['feat_pos'][:]
         X_neg = self.hfile['feat_neg'][:]
         X_query = self.hfile['feat_query'][:]
-        if self.config.datagen.normalize:
+        if self.config.experiment.datagen.normalize:
             X_pos = self.feature_scale(X_pos)
             X_neg = self.feature_scale(X_neg)
             X_query = self.feature_scale(X_query)

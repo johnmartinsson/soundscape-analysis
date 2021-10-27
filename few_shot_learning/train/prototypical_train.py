@@ -37,9 +37,9 @@ valid_loader = torch.utils.data.DataLoader(dataset=valid_dataset,batch_sampler=s
 
 #Should the loaders be created in here instead? Based on some config stuff?
 #Talk about this
-def train(model, optimizer, loss_function, train_loader, val_loader, config):
+def train(model, optimizer, loss_function, train_loader, val_loader, config, writer):
     
-    if config.set.device == 'cuda':
+    if config.experiment.set.device == 'cuda':
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
@@ -47,12 +47,12 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config):
     #Should this be done here or passed into this function?
     #Could be configs for more terminal flexibility
     optim = optimizer
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optim, gamma=config.train.scheduler_gamma,
-                                                  step_size=config.train.scheduler_step_size)
-    num_epochs = config.train.epochs
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optim, gamma=config.experiment.train.scheduler_gamma,
+                                                  step_size=config.experiment.train.scheduler_step_size)
+    num_epochs = config.experiment.train.epochs
     
-    best_model_path = config.path.best_model
-    last_model_path = config.path.last_model
+    best_model_path = config.experiment.path.best_model
+    last_model_path = config.experiment.path.last_model
     train_loss = []
     val_loss = []
     train_acc = []
@@ -62,10 +62,16 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config):
     
     num_batches_tr = len(train_loader)
     num_batches_val = len(val_loader)
-
-    writer = SummaryWriter(log_dir=config.train.artifacts_path)
-
+    
+    #As this grows just create a list i think over all diferent active styles
+    if config.experiment.train.sampler == 'activequery':
+        train_loader.batch_sampler.set_model(model)
+        train_loader.batch_sampler.set_writer(writer)
+    
     for epoch in range(num_epochs):
+        
+        if config.experiment.train.sampler == 'activequery':
+            train_loader.batch_sampler.set_epoch(epoch)
         
         print('Epoch {}'.format(epoch))
         train_iterator = iter(train_loader)
@@ -80,7 +86,7 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config):
             #TODO: We should possibly handle the loss handle here differently?
             #This should most likely be some kind of argument no?
             #Or is this OK since we already are in an application specific training loop?
-            tr_loss, tr_acc = loss_function(x_out, y, config.train.n_shot)
+            tr_loss, tr_acc = loss_function(x_out, y, config.experiment.train.n_shot)
             train_loss.append(tr_loss.item())
             train_acc.append(tr_acc.item())
             
@@ -104,6 +110,12 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config):
         writer.add_scalar('Loss/train', avg_loss_tr, epoch)
         writer.add_scalar('Accuracy/train', avg_acc_tr, epoch)
         
+        if config.experiment.train.sampler == 'activequery':
+            print('Maximum query entropy: {}  Minimum query entropy: {}'.format(
+            train_loader.batch_sampler.max_entropy, train_loader.batch_sampler.min_entropy))
+            writer.add_scalar('Entropy/minimum', train_loader.batch_sampler.min_entropy, epoch)
+            writer.add_scalar('Entropy/maximum', train_loader.batch_sampler.max_entropy, epoch)
+            
         lr_scheduler.step()
         
         #No dropouts in model for now, I think there is no difference between train and eval mode
@@ -114,7 +126,7 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config):
             x = x.to(device)
             x_val = model(x)
             #TODO: ditto as above
-            valid_loss, valid_acc = loss_function(x_val, y, config.train.n_shot)
+            valid_loss, valid_acc = loss_function(x_val, y, config.experiment.train.n_shot)
             val_loss.append(valid_loss.item())
             val_acc.append(valid_acc.item())
         avg_loss_val = np.mean(val_loss[-num_batches_val:])

@@ -7,12 +7,33 @@ from glob import glob
 import h5py
 import csv
 
+'''
+This file requires additional work I feel.
+Why not pack pre-processing and actual metric into here.
+Spit out eval.csv -> ppeval.csv -> score
+Tensorboard the score?
+How to pass writer around?
+'''
+
 #Do we like this relative import?
 import datasets.dcase_few_shot_bioacoustic as util
 
-def eval(model, test_loader, config):
+#TODO: Have writer add scalar for fmeasure/precision/recall.
+def eval(model, test_loader, config, writer):
     
-    if config.set.device == 'cuda':
+    if config.experiment.eval.dataset == 'VAL':
+        return eval_help(model, test_loader, config, writer, 'VAL')
+    elif config.experiment.eval.dataset == 'TEST':
+        return eval_help(model, test_loader, config, writer, 'TEST')
+    elif config.experiment.eval.dataset == 'VALTEST':
+        #Perhaps no need to return these?
+        #We most likely will do these one by one for the neg exp
+        eval_help(model, test_loader, config, writer, 'VAL')
+        eval_help(model, test_loader, config, writer, 'TEST')
+
+def eval_help(model, test_loader, config, writer, tag):
+    
+    if config.experiment.set.device == 'cuda':
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
@@ -20,7 +41,11 @@ def eval(model, test_loader, config):
     name_arr = np.array([])
     onset_arr = np.array([])
     offset_arr = np.array([])
-    all_feat_files = [file for file in glob(os.path.join(config.path.test_w,'*.h5'))]
+    
+    if tag == 'VAL':
+        all_feat_files = [file for file in glob(os.path.join(config.experiment.path.val_w,'*.h5'))]
+    elif tag == 'TEST':
+        all_feat_files = [file for file in glob(os.path.join(config.experiment.path.test_w,'*.h5'))]
 
     for feat_file in all_feat_files:
         feat_name = feat_file.split('/')[-1]
@@ -38,11 +63,30 @@ def eval(model, test_loader, config):
         offset_arr = np.append(offset_arr,offset)
 
     df_out = pd.DataFrame({'Audiofilename':name_arr,'Starttime':onset_arr,'Endtime':offset_arr})
-    csv_path = os.path.join(config.root_path,'Eval_out.csv')
-    df_out.to_csv(csv_path,index=False)
-
-
-
+    #csv_path = os.path.join(config.experiment.root_path,'Eval_out.csv')
+    #Do this instead for now, configurable best in the end.
+    
+    #Eval pipe!
+    if tag == 'VAL':
+        csv_path = 'VAL_out.csv'
+        df_out.to_csv(csv_path,index=False)
+        util.post_processing(config.experiment.path.data_val, csv_path, 'PP_'+csv_path)
+        scores = util.evaluate('PP_'+csv_path, config.experiment.path.val_OG, tag, './')
+        
+    elif tag == 'TEST':
+        csv_path = 'TEST_out.csv'
+        df_out.to_csv(csv_path,index=False)
+        util.post_processing(config.experiment.path.data_test, csv_path, 'PP_'+csv_path)
+        scores = util.evaluate('PP_'+csv_path, config.experiment.path.test_OG, tag, './')
+        
+    if writer is not None:
+        writer.add_scalar(tag+'_fmeasure', scores['fmeasure (percentage)'])
+        writer.add_scalar(tag+'precision', scores['precision'])
+        writer.add_scalar(tag+'recall', scores['recall'])
+    
+    return scores
+    
+    
 def dummy_choice(csv, n_shots):
     events = []
     for i in range(len(csv)):

@@ -27,11 +27,11 @@ class SpectralFeatureExtractor(FeatureExtractor):
     def extract_train(self):
 
         print('--- Processing training data ---')
-        csv_files = [file for file in glob(os.path.join(self.config.path.data_train, '*.csv'))]
+        csv_files = [file for file in glob(os.path.join(self.config.experiment.path.data_train, '*.csv'))]
 
-        fps = self.config.features.sr / self.config.features.hop_mel
-        seg_len = int(round(self.config.features.seg_len * fps))
-        hop_seg = int(round(self.config.features.hop_seg * fps))
+        fps = self.config.experiment.features.sr / self.config.experiment.features.hop_mel
+        seg_len = int(round(self.config.experiment.features.seg_len * fps))
+        hop_seg = int(round(self.config.experiment.features.hop_seg * fps))
         
         labels = []
         events = []
@@ -39,7 +39,7 @@ class SpectralFeatureExtractor(FeatureExtractor):
         for file in csv_files:
             
             print('Processing ' + file.replace('csv', 'wav'))
-            audio, sr = librosa.load(file.replace('csv', 'wav'), self.config.features.sr)
+            audio, sr = librosa.load(file.replace('csv', 'wav'), self.config.experiment.features.sr)
             
             print('Spectral transform')
             pcen = self.spectralizer.raw_to_spec(audio, self.config)
@@ -91,21 +91,30 @@ class SpectralFeatureExtractor(FeatureExtractor):
         
         events = np.array(events)
         
-        hf = h5py.File(os.path.join(self.config.path.train_w, 'mel_train.h5'), 'w')
+        hf = h5py.File(os.path.join(self.config.experiment.path.train_w, 'mel_train.h5'), 'w')
         hf.create_dataset('features', data=events)
         hf.create_dataset('labels', data=[s.encode() for s in labels], dtype='S20')
         hf.close()
         
         print('Done')
 
+    #Make it so that this can handle the official evaluation set as well.
     def extract_test(self):
-
-        print('--- Processing test data ---')
-        csv_files = [file for file in glob(os.path.join(self.config.path.data_test, '*.csv'))]
-
-        fps = self.config.features.sr / self.config.features.hop_mel
-        seg_len = int(round(self.config.features.seg_len * fps))
-        hop_seg = int(round(self.config.features.hop_seg * fps))
+        
+        #TODO, make switch between VAL or TEST possible.
+        
+        if config.experiment.eval.dataset == 'VAL':
+            print('--- Processing validation data ---')
+            csv_files = [file for file in glob(os.path.join(self.config.experiment.path.data_val, '*.csv'))]
+        elif config.experiment.eval.dataset == 'TEST':
+            print('--- Processing test data ---')
+            csv_files = [file for file in glob(os.path.join(self.config.experiment.path.data_test, '*.csv'))]
+        else:
+            raise Exception
+                
+        fps = self.config.experiment.features.sr / self.config.experiment.features.hop_mel
+        seg_len = int(round(self.config.experiment.features.seg_len * fps))
+        hop_seg = int(round(self.config.experiment.features.hop_seg * fps))
 
         for file in csv_files:
                 
@@ -124,12 +133,17 @@ class SpectralFeatureExtractor(FeatureExtractor):
             feat_name = name + '.h5'
             audio_path = file.replace('csv', 'wav')
             feat_info = []
-            hdf_eval = os.path.join(self.config.path.test_w ,feat_name)
+            
+            if config.experiment.eval.dataset == 'VAL':
+                hdf_eval = os.path.join(self.config.experiment.path.val_w ,feat_name)
+            elif config.experiment.eval.dataset == 'TEST':
+                hdf_eval = os.path.join(self.config.experiment.path.test_w ,feat_name)
+                
             hf = h5py.File(hdf_eval,'w')
-            hf.create_dataset('feat_pos', shape=(0, seg_len, self.config.features.n_mels),
-                                maxshape= (None, seg_len, self.config.features.n_mels))
-            hf.create_dataset('feat_query',shape=(0,seg_len, self.config.features.n_mels),maxshape=(None,seg_len,self.config.features.n_mels))
-            hf.create_dataset('feat_neg',shape=(0,seg_len, self.config.features.n_mels),maxshape=(None,seg_len,self.config.features.n_mels))
+            hf.create_dataset('feat_pos', shape=(0, seg_len, self.config.experiment.features.n_mels),
+                                maxshape= (None, seg_len, self.config.experiment.features.n_mels))
+            hf.create_dataset('feat_query',shape=(0,seg_len, self.config.experiment.features.n_mels),maxshape=(None,seg_len,self.config.experiment.features.n_mels))
+            hf.create_dataset('feat_neg',shape=(0,seg_len, self.config.experiment.features.n_mels),maxshape=(None,seg_len,self.config.experiment.features.n_mels))
             hf.create_dataset('start_index_query',shape=(1,),maxshape=(None))
 
             'In case you want to use the statistics of each file to normalize'
@@ -142,9 +156,9 @@ class SpectralFeatureExtractor(FeatureExtractor):
 
             start_time,end_time = util.time_2_frame(df_eval,fps)
 
-            index_sup = np.where(Q_list == 'POS')[0][:self.config.train.n_shot]
+            index_sup = np.where(Q_list == 'POS')[0][:self.config.experiment.train.n_shot]
 
-            audio, sr = librosa.load(file.replace('csv', 'wav'), self.config.features.sr)
+            audio, sr = librosa.load(file.replace('csv', 'wav'), self.config.experiment.features.sr)
             print('Spectral transform')
             pcen = self.spectralizer.raw_to_spec(audio, self.config)
             
@@ -229,6 +243,8 @@ class SpectralFeatureExtractor(FeatureExtractor):
 
             hf.close()
 
+    
+
 
 
 
@@ -245,7 +261,7 @@ class RawFeatureExtractor(FeatureExtractor):
     def extract_train(self):
 
         print('--- Processing training data ---')
-        csv_files = [file for file in glob(os.path.join(self.config.path.data_train, '*.csv'))]
+        csv_files = [file for file in glob(os.path.join(self.config.experiment.path.data_train, '*.csv'))]
 
         events = []
         labels = []
@@ -253,7 +269,7 @@ class RawFeatureExtractor(FeatureExtractor):
         for file in csv_files:
         
             print('Processing ' + file.replace('csv', 'wav'))
-            audio, sr = librosa.load(file.replace('csv', 'wav'), self.config.features.sr)
+            audio, sr = librosa.load(file.replace('csv', 'wav'), self.config.experiment.features.sr)
             df = pd.read_csv(file, header=0, index_col=False)
             df_pos = df[(df == 'POS').any(axis=1)]
             
@@ -279,13 +295,13 @@ class RawFeatureExtractor(FeatureExtractor):
                 
         for i in range(len(events)):
             if len(events[i]) < max_len:
-                events[i] = np.append(events[i], np.array([self.config.features.raw_pad]*(max_len-len(events[i]))))
+                events[i] = np.append(events[i], np.array([self.config.experiment.features.raw_pad]*(max_len-len(events[i]))))
         
         events = np.array(events)
         
         print('Writing to file')
         
-        hf = h5py.File(os.path.join(self.config.path.train_w, 'raw_train.h5'), 'w')
+        hf = h5py.File(os.path.join(self.config.experiment.path.train_w, 'raw_train.h5'), 'w')
         hf.create_dataset('features', data=events)
         hf.create_dataset('labels', data=[s.encode() for s in labels], dtype='S20')
         hf.close()
@@ -303,11 +319,11 @@ class Spectralizer():
     def __init__(self, config):
         self.config = config
         
-        self.sr = config.features.sr
-        self.n_fft = config.features.n_fft
-        self.hop = config.features.hop_mel
-        self.n_mels = config.features.n_mels
-        self.fmax = config.features.fmax
+        self.sr = config.experiment.features.sr
+        self.n_fft = config.experiment.features.n_fft
+        self.hop = config.experiment.features.hop_mel
+        self.n_mels = config.experiment.features.n_mels
+        self.fmax = config.experiment.features.fmax
         
 
     def raw_to_spec(self, audio, config):
