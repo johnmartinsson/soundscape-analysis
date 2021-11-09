@@ -59,7 +59,7 @@ def main(cfg):
         test_loader = module_dataset.get_dataloaders_test(cfg)
     #train_loader, val_loader, test_loader = module_dataset.get_dataloaders(cfg['dataset'])
     optimizer = module_optimizer.load(cfg, model)
-    loss_function = module_loss_function.load()
+    loss_function = module_loss_function.load(cfg)
     train_function = module_train.load()
     eval_function = module_eval.load()
 

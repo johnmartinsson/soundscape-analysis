@@ -1,0 +1,12 @@
+root_path: randompath
+#As the scope of the code grows there is most likely need to get more
+#organized when it comes to paths/file names/h5 datasets.
+
+defaults:
+    - experiment/activequery
+
+seed: 42
+
+writer:
+    directory: none
+    comment: none

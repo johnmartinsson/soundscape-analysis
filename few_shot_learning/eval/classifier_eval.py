@@ -1,3 +1,7 @@
+'''
+Borrow heavily from prot eval. We basically can reuse the code but just use the embedding output from the model
+'''
+
 
 import torch
 import numpy as np

@@ -10,8 +10,11 @@ import datasets.randomepisode as re
 import datasets.activeepisode as ae
 import datasets.data_gen as dg
 import models.prototypical as pt
+from sklearn.cluster import  KMeans
+
 import pandas as pd
 import os
+import utils
 import math
 import json
 import csv
@@ -19,6 +22,7 @@ from datetime import datetime
 import copy
 from scipy import stats
 from glob import glob
+
 
 def time_2_frame(df,fps):
 
@@ -124,9 +128,48 @@ def get_probability(pos_proto,neg_proto,query_set_out):
     #pos_prototype = x_pos.mean(0)
     prototypes = torch.stack([pos_proto,neg_proto])
     dists = euclidean_dist(query_set_out,prototypes)
+    #Eh what. Is done in the OG code as well?
     '''  Taking inverse distance for converting distance to probabilities'''
     inverse_dist = torch.div(1.0, dists)
     prob = torch.softmax(inverse_dist,dim=1)
+    '''  Probability array for positive class'''
+    prob_pos = prob[:,0]
+
+    return prob_pos.detach().cpu().tolist()
+
+def get_probability_negdistance(pos_proto,neg_proto,query_set_out):
+
+
+    """Calculates the  probability of each query point belonging to either the positive or negative class
+     Args:
+     - x_pos : Model output for the positive class
+     - neg_proto : Negative class prototype calculated from randomly chosed 100 segments across the audio file
+     - query_set_out:  Model output for the first 8 samples of the query set
+
+     Out:
+     - Probabiility array for the positive class
+     """
+    
+    '''
+    This function should now to what we want right?
+    Should we always use this? I'm inclined to say yes.
+    Think this is better than actually using 1/d and softmax on that.
+    '''
+    
+    #pos_prototype = x_pos.mean(0)
+    #TODO: Configurable emb_dim
+    prototypes = torch.zeros(0, pos_proto.shape[0])
+    prototypes = prototypes.to('cuda') #TODO: Fix this
+    prototypes = torch.cat((prototypes, torch.reshape(pos_proto, (1, -1))))
+    if len(neg_proto.shape) > 1:
+        prototypes = torch.cat((prototypes, neg_proto))
+    else:
+        prototypes = torch.cat((prototypes, torch.reshape(neg_proto, (1, -1))))
+    dists = euclidean_dist(query_set_out,prototypes)
+    dists = torch.neg(dists)
+    #Eh what. Is done in the OG code as well?
+    '''  Taking inverse distance for converting distance to probabilities'''
+    prob = torch.softmax(dists,dim=1)
     '''  Probability array for positive class'''
     prob_pos = prob[:,0]
 
@@ -136,7 +179,7 @@ def get_probability(pos_proto,neg_proto,query_set_out):
 
 #Quite possible that this should actually be somewhere else.
 
-def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=None):
+def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=None, model=None):
 
     """ Run the evaluation
     Args:
@@ -171,16 +214,18 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
     SUPER IMPORTANT!!!!
     '''
     q_loader = torch.utils.data.DataLoader(dataset=query_dataset, batch_sampler=None,batch_size=config.experiment.eval.query_batch_size,shuffle=False)
-    
-    Model = pt.Protonet()
+    if model is None:
+        #This should also listen to the config for which model we uses.
+        module_model = utils.load_module(config.experiment.model.script_path)
+        model = module_model.load(config)
 
-    if device == 'cpu':
-        Model.load_state_dict(torch.load(config.experiment.path.best_model, map_location=torch.device('cpu')))
-    else:
-        Model.load_state_dict(torch.load(config.experiment.path.best_model))
+        if device == 'cpu':
+            model.load_state_dict(torch.load(config.experiment.path.best_model, map_location=torch.device('cpu')))
+        else:
+            model.load_state_dict(torch.load(config.experiment.path.best_model))
 
-    Model.to(device)
-    Model.eval()
+    model.to(device)
+    model.eval()
 
     'List for storing the combined probability across all iterations'
     prob_comb = []
@@ -188,6 +233,7 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
     #TODO: Remove this iteration stuff probably? What's the point?
     #Perhaps as a precaution do an empirical test on doing this versus just increasing the sample size to * iterations.
     iterations = config.experiment.eval.iterations
+    num_neg_prot = 0
     for i in range(iterations):
         prob_pos_iter = []
         
@@ -229,24 +275,51 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
 
         if config.experiment.eval.samples_neg != -1  or (config.experiment.eval.use_fraction_neg and config.experiment.eval.fraction_neg != 1):
             print("Iteration number {}".format(i))
-            
+        
+        #TODO: Implement clustering and provide several negative prototypes if wanted.
+        #Make this highly configurable. We might even want to split this into files/function calls and have some if structure here instead?
+        #So if no clustering we return shape (emb_dim)
+        #Else return shape (K, emb_dim)
+        #The get probability function can work with both
+        
         neg_set_feat = torch.zeros(0,1024).cpu()
         print('Processing negatives')
         for batch in tqdm(neg_iterator):
             x_neg, y_neg = batch
             x_neg = x_neg.to(device)
-            feat_neg = Model(x_neg)
+            #True baind-aid fix right here:
+            if config.type.classifier:
+                feat_neg, _ = model(x_neg)
+            else:
+                feat_neg = model(x_neg)
             feat_neg = feat_neg.detach().cpu()
             neg_set_feat = torch.cat((neg_set_feat, feat_neg), dim=0)
-        neg_proto = neg_set_feat.mean(dim=0)
-        neg_proto =neg_proto.to(device)
+        
+        #Does this work? Eh I think it does actually, first try ezi pizi #NOPE
+        if config.experiment.eval.clustering:
+            if config.experiment.eval.cluster_method == 'kmeans':
+            
+                cluster = KMeans(config.experiment.eval.cluster_K)
+                print('Fitting cluster')
+                cluster.fit(neg_set_feat)
+                neg_proto = torch.tensor(cluster.cluster_centers_)
+                neg_proto = neg_proto.to(device)
+                num_neg_prot = len(cluster.cluster_centers_)
+        else:
+            neg_proto = neg_set_feat.mean(dim=0)
+            neg_proto =neg_proto.to(device)
+            num_neg_prot = 1
+        
         
         pos_set_feat = torch.zeros(0,1024).cpu()
         print('Processing positives')
         for batch in tqdm(pos_iterator):
             x_pos, y_pos = batch
             x_pos = x_pos.to(device)
-            feat_pos = Model(x_pos)
+            if config.type.classifier:
+                feat_pos, _ = model(x_pos)
+            else:
+                feat_pos = model(x_pos)
             feat_pos = feat_pos.detach().cpu()
             pos_set_feat = torch.cat((pos_set_feat, feat_pos), dim=0)
         pos_proto = pos_set_feat.mean(dim=0)
@@ -256,8 +329,13 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
         for batch in tqdm(q_iterator):
             x_q, y_q = batch
             x_q = x_q.to(device)
-            x_query = Model(x_q)
-            probability_pos = get_probability(pos_proto, neg_proto, x_query)
+            if config.type.classifier:
+                x_query, _ = model(x_q)
+            else:
+                x_query = model(x_q)
+            #TODO: Expand this for several negative prototypes.
+            #probability_pos = get_probability(pos_proto, neg_proto, x_query)
+            probability_pos = get_probability_negdistance(pos_proto, neg_proto, x_query)
             prob_pos_iter.extend(probability_pos)
 
         prob_comb.append(prob_pos_iter)
@@ -268,8 +346,11 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
     prob_final = np.mean(np.array(prob_comb),axis=0)
 
     krn = np.array([1, -1])
-    prob_thresh = np.where(prob_final > config.experiment.eval.p_thresh, 1, 0)
-
+    #If using clustering we might want to consider scaling the threshold
+    #Lets test this for now.
+    #prob_thresh = np.where(prob_final > config.experiment.eval.p_thresh, 1, 0)
+    prob_thresh = np.where(prob_final > 1/(1+num_neg_prot), 1, 0)
+    
     prob_pos_final = prob_final * prob_thresh
     changes = np.convolve(krn, prob_thresh)
 
@@ -288,81 +369,62 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
     return onset, offset
 
 
-
+'''
+One can argue that this code should not be here maybe?
+This is quite meta-learning heavy.
+We could also just make a copy of this file. This is very much not neet.
+Argueably better to start splitting it. Remove all that has to do with meta-learning
+such as this function and keep everything that is relevant for SED.
+'''
 def get_dataloaders_train(config):
 
     print('get_dataloaders')
 
-    if config.experiment.set.features:
-        print('Setting features')
-        if config.experiment.features.raw:
-            feature_extractor = fe.RawFeatureExtractor(config)
-        else:
-            feature_extractor = fe.SpectralFeatureExtractor(config)
-        
-        feature_extractor.extract_train()
-
     datagen = dg.Datagen(config)
-    X_train, Y_train, X_val, Y_val = datagen.generate_train()
+    #X_train, Y_train, X_val, Y_val = datagen.generate_train()
+    X_train, Y_train = datagen.generate_train()
 
     X_tr = torch.tensor(X_train)
     Y_tr = torch.LongTensor(Y_train)
-    X_val = torch.tensor(X_val)
-    Y_val = torch.LongTensor(Y_val)
+    #X_val = torch.tensor(X_val)
+    #Y_val = torch.LongTensor(Y_val)
 
     samples_per_cls = config.experiment.train.n_shot + config.experiment.train.n_query
     batch_size_tr = samples_per_cls * config.experiment.train.k_way
-    batch_size_vd = batch_size_tr
+    #batch_size_vd = batch_size_tr
     num_batches_tr = len(Y_train)//batch_size_tr
-    num_batches_vd = len(Y_val)//batch_size_vd
+    #num_batches_vd = len(Y_val)//batch_size_vd
     
     
     train_set = torch.utils.data.TensorDataset(X_tr, Y_tr)
-    val_set = torch.utils.data.TensorDataset(X_val, Y_val)
+    #val_set = torch.utils.data.TensorDataset(X_val, Y_val)
     
     if config.experiment.train.sampler == 'random':
         tr_sampler = re.RandomEpisodicSampler(Y_train, num_batches_tr, config.experiment.train.k_way,
         config.experiment.train.n_shot, config.experiment.train.n_query)
-        val_sampler = re.RandomEpisodicSampler(Y_val, num_batches_vd, config.experiment.train.k_way,
-        config.experiment.train.n_shot, config.experiment.train.n_query)
+        #val_sampler = re.RandomEpisodicSampler(Y_val, num_batches_vd, config.experiment.train.k_way,
+        #config.experiment.train.n_shot, config.experiment.train.n_query)
 
     if config.experiment.train.sampler == 'activequery':
         tr_sampler = ae.ActiveQuerySampler(train_set, Y_train, num_batches_tr, config.experiment.train.k_way,
-        config.experiment.train.n_shot, config.experiment.train.n_query, config.experiment.set.device)
-        val_sampler = re.RandomEpisodicSampler(Y_val, num_batches_tr, config.experiment.train.k_way,
-        config.experiment.train.n_shot, config.experiment.train.n_query)
+        config.experiment.train.n_shot, config.experiment.train.n_query, config.experiment.set.device, config.experiment.train.query_candidates,
+                                          config.type.classifier)
+        #val_sampler = re.RandomEpisodicSampler(Y_val, num_batches_tr, config.experiment.train.k_way,
+        #config.experiment.train.n_shot, config.experiment.train.n_query)
 
     train_loader = torch.utils.data.DataLoader(dataset=train_set, batch_sampler=tr_sampler, num_workers=0,
     pin_memory=True, shuffle=False)
-    val_loader = torch.utils.data.DataLoader(dataset=val_set, batch_sampler=val_sampler, num_workers=0,
-    pin_memory=True, shuffle=False)
+    #val_loader = torch.utils.data.DataLoader(dataset=val_set, batch_sampler=val_sampler, num_workers=0,
+    #pin_memory=True, shuffle=False)
 
-    return train_loader, val_loader
+    return train_loader, None
 
 #For the dcase acoustic this can just probably return None
 #Handles data loading differently for eval
 #Check prototypical_eval.py
-def get_dataloaders_test(config):
-    
-    #TODO fix fe test
-    if config.experiment.set.features:
-        if config.experiment.features.raw:
-            feature_extractor = fe.RawFeatureExtractor(config)
-        else:
-            feature_extractor = fe.SpectralFeatureExtractor(config)
-        
-        feature_extractor.extract_test()
+def get_dataloaders_test(config):    
     return None
-    '''
-    if config.set.features:
-        print('Setting features')
-        if config.features.raw:
-            feature_extractor = fe.RawFeatureExtractor(config)
-        else:
-            feature_extractor = fe.SpectralFeatureExtractor(config)
-        
-        feature_extractor.extract_test()
-    '''
+
     
     
 ########################################################################################

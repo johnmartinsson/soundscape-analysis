@@ -10,7 +10,7 @@ class ActiveQuerySampler(data.Sampler):
     
     #Include the option to choose the number of query samples
     #Y_train -> labels, just a list of the targets (list of ints?)
-    def __init__(self, dataset, labels, n_episodes, n_way, n_support, n_query, device):
+    def __init__(self, dataset, labels, n_episodes, n_way, n_support, n_query, device, query_candidates, classifier_model):
     
     
         #Number of episodes per epoch. len(labels)/(n_support * n_query) ?
@@ -18,6 +18,8 @@ class ActiveQuerySampler(data.Sampler):
         self.n_way = n_way
         self.n_support = n_support
         self.n_query = n_query
+        self.classifier_model = classifier_model
+        self.query_candidates = query_candidates
         self.n_samples = n_support+n_query
         self.dataset = dataset
         labels = np.array(labels)
@@ -75,7 +77,7 @@ class ActiveQuerySampler(data.Sampler):
                 supp_idx.append(l[perm[:self.n_support]])
                 #Might consider making this just a teeny bit smaller for speed/VRAM
                 #Perhaps configurable who knows
-                q_idx.append(l[perm[self.n_support:300]])
+                q_idx.append(l[perm[self.n_support:(self.n_support+self.query_candidates)]])
                 
             q_idx = np.array([e for l in q_idx for e in l])
 
@@ -83,7 +85,11 @@ class ActiveQuerySampler(data.Sampler):
             #Almost, need to do this per idx_l to stack proto separately
             for idx_l in supp_idx:
                 tmp = torch.stack([self.dataset[i][0] for i in idx_l]).to(self.device)
-                prototypes.append(self.model(tmp).mean(0))
+                if self.classifier_model:
+                    emb, _ = self.model(tmp)
+                    prototypes.append(emb.mean(0))
+                else:
+                    prototypes.append(self.model(tmp).mean(0))
             #t = torch.stack([self.dataset[i][0] for idx_l in supp_idx for i in idx_l])
             prototypes = torch.stack(prototypes)
             
@@ -95,12 +101,20 @@ class ActiveQuerySampler(data.Sampler):
                 else:
                     idx = np.arange(i,i+50)
                     tmp = torch.stack([self.dataset[j][0] for j in q_idx[idx]]).to(self.device)
-                    query.append(self.model(tmp))
+                    if self.classifier_model:
+                        emb, _ = self.model(tmp)
+                        query.append(emb)
+                    else:
+                        query.append(self.model(tmp))
                     i += 50
             
             if i != len(q_idx):
                 tmp = torch.stack([self.dataset[j][0] for j in q_idx[i:]]).to(self.device)
-                query.append(self.model(tmp))
+                if self.classifier_model:
+                    emb, _ = self.model(tmp)
+                    query.append(emb)
+                else:
+                    query.append(self.model(tmp))
             query = torch.cat(query)
             
             prototypes = prototypes.detach().cpu()

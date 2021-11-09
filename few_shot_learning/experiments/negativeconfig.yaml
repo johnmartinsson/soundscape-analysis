@@ -1,0 +1,66 @@
+#Config for the negative prototype experiment.
+
+seed: 42
+
+model: randomepisode #Either randomepisode or activequery
+fractions: [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
+#negative_fractions: [1]
+iterations: 20
+
+vary_neg: false
+vary_pos: true
+
+experiment:
+    
+    set:
+        device: cuda
+        
+    train:
+        n_shot: 5
+        
+    #Some of these are not nessecary for this experiment but
+    features:
+        raw: false
+        raw_pad: 123.456
+        seg_len: 0.200
+        hop_seg: 0.050
+        eps: 2.220446049250313e-16
+        fmax: 11025
+        fmin: 50
+        sr: 22050
+        n_fft: 1024
+        n_mels: 128
+        hop_mel: 256
+        
+    path:
+        best_model: ???
+        data_train: /home/willbo/data/dcase/train
+        data_val: /home/willbo/data/dcase/val
+        data_test: /home/willbo/data/dcase/test
+        train_w: /home/willbo/data/dcase/hfiles/train
+        val_w: /home/willbo/data/dcase/hfiles/val
+        test_w: /home/willbo/data/dcase/hfiles/test
+        val_OG: /home/willbo/data/dcase/Validation_Set
+        test_OG: /home/willbo/data/dcase/Test_Set
+    
+    datagen:
+        raw: false
+        normalize: true
+        transpose: true
+        balance: true
+        ltoi: true
+        stratify: true
+        
+    eval:
+      use_fraction_neg: true
+      use_fraction_pos: true
+      fraction_neg: ???
+      fraction_pos: 1
+      samples_pos: -1
+      dataset: VAL
+      samples_neg: -1 #Introduce number for 'all', ex -1
+      iterations: 1
+      query_batch_size: 200
+      negative_set_batch_size: 200
+      positive_set_batch_size: 20
+      p_thresh: 0.5

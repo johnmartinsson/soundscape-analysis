@@ -7,18 +7,23 @@ import datasets.dcase_few_shot_bioacoustic as util
 
 #Relative import again
 
+
+'''
+Should now return just X_train and Y_train. None of this training data will be used in a validation loader.
+This file should probably sooner or later have a different name for integration into the repo.
+'''
 class Datagen():
     
     def __init__(self, config):
         
         self.config = config
         
-        if config.experiment.features.raw:
+        if config.experiment.datagen.raw:
             #These obviosly requires more processing down the pipe but that is application dependent.
             #Leave be for now
-            hf = h5py.File(os.path.join(config.experiment.path.train_w, 'raw_train.h5'))
+            hf = h5py.File(os.path.join(config.experiment.path.train_features, 'raw_train.h5'))
         else:
-            hf = h5py.File(os.path.join(config.experiment.path.train_w, 'mel_train.h5'))
+            hf = h5py.File(os.path.join(config.experiment.path.train_features, 'mel_train.h5'))
             self.x = hf['features'][:]
             self.labels = [s.decode() for s in hf['labels'][:]]
             if config.experiment.datagen.ltoi:
@@ -27,17 +32,9 @@ class Datagen():
                 self.y = self.labels
             if config.experiment.datagen.balance:
                 self.x, self.y = util.balance_class_distribution(self.x, self.y)
-            
-            array_train = np.arange(len(self.x))
-            if config.experiment.datagen.stratify:
-                _,_,_,_,train_array,valid_array = train_test_split(self.x, self.y, array_train,                                                     random_state=config.seed, stratify=self.y)
-            else:
-                _,_,_,_,train_array,valid_array = train_test_split(self.x, self.y, array_train,                                                     random_state=config.seed)
-                
-            self.train_index = train_array
-            self.valid_index = valid_array
+             
             if config.experiment.datagen.normalize:
-                self.mean, self.std = util.norm_params(self.x[train_array])
+                self.mean, self.std = util.norm_params(self.x)
             else:
                 self.mean = None
                 self.std = None
@@ -46,16 +43,13 @@ class Datagen():
         return (x - self.mean)/self.std
     
     def generate_train(self):
-        train_array = sorted(self.train_index)
-        valid_array = sorted(self.valid_index)
-        X_train = self.x[train_array]
-        Y_train = self.y[train_array]
-        X_val = self.x[valid_array]
-        Y_val = self.y[valid_array]
+        
+        X_train = self.x
+        Y_train = self.y
         if self.config.experiment.datagen.normalize:
             X_train = self.feature_scale(X_train)
-            X_val = self.feature_scale(X_val)
-        return X_train, Y_train, X_val, Y_val
+            
+        return X_train, Y_train
         
 
 #In comparison to parent class instances will work on one particular hfile
