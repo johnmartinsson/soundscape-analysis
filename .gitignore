@@ -127,6 +127,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-data
-kaleidoscope
-notebooks
+/data
+/kaleidoscope
+/notebooks
+/datasets
+/loss_functions

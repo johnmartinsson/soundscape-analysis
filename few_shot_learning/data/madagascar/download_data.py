@@ -58,4 +58,4 @@ if __name__ == "__main__":
 
     path_id = input("Google Drive folder id: ")
 
-    recursive_download(path_id, "downloaded")
+    recursive_download(path_id, "/mnt/storage_1/john/data/madagascar/SM1/")
