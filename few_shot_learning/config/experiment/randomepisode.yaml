@@ -1,31 +1,21 @@
 
 set:
-  features: false
   train: true
   eval: true
   device: cuda
 
-#TODO fix root path stuff, check dcase, assumes data to be in repo in that casse ofc.
-#unless over written
+#Is it not just simpler to point to a feature root directory. Makes it simpler to not fuck up.
 path:
-  #root: /home/willbo/data/dcase
-  #root: C:\Users\martin\Documents\playground
+  features: /home/willbo/data/dcase/features
+  train_features: ${experiment.path.features}/hfiles/train
+  test_features: ${experiment.path.features}/hfiles/test
+  val_features: ${experiment.path.features}/hfiles/val
   data_train: /home/willbo/data/dcase/train
-  #data_train: C:\Users\martin\Documents\playground\data\train
-  data_test: /home/willbo/data/dcase/test
-  #data_test: C:\Users\martin\Documents\playground\data\test
   data_val: /home/willbo/data/dcase/val
-  train_w: /home/willbo/data/dcase/hfiles/train
-  #train_w: C:\Users\martin\Documents\playground\data\hfiles\train
-  test_w: /home/willbo/data/dcase/hfiles/test
-  #test_w: C:\Users\martin\Documents\playground\data\hfiles\test
-  val_w: /home/willbo/data/dcase/hfiles/val
+  data_test: /home/willbo/data/dcase/test
   best_model: best_model.pth
-  #best_model: C:\Users\martin\Documents\playground\data\models\best_model.pth
   last_model: last_model.pth
-  #last_model: C:\Users\martin\Documents\playground\data\models\last_model.pth
   
-  #This is ugly, fix this some time.
   val_OG: /home/willbo/data/dcase/Validation_Set
   test_OG: /home/willbo/data/dcase/Test_Set
 
@@ -41,19 +31,7 @@ optimizer:
 loss_function:
   script_path: ${root_path}/loss_functions/prototypicalloss.py
 
-features:
-  raw: false
-  raw_pad: 123.456
-  seg_len: 0.200
-  hop_seg: 0.050
-  eps: 2.220446049250313e-16
-  fmax: 11025
-  fmin: 50
-  sr: 22050
-  n_fft: 1024
-  n_mels: 128
-  hop_mel: 256
-
+#Not really important for just extraction right?
 datagen:
   raw: false
   normalize: true
@@ -71,16 +49,45 @@ train:
   n_query: 5
   k_way : 10
   lr: 0.0001
+  l2: 0
   scheduler_gamma: 0.5
   scheduler_step_size: 10
   epochs: 15
+  
+  semi_supervised: false
+  semi_root_path: /home/willbo/data/dcase/features_nolap
+  semi_train_path: ${experiment.train.semi_root_path}/hfiles/train/whole
+  semi_val_path: ${experiment.train.semi_root_path}/hfiles/val
+  semi_test_path: ${experiment.train.semi_root_path}/hfiles/test
+  
+  #Gonna need more config options here
+  semi_use_train: true
+  semi_use_val: true
+  semi_use_test: true
+  
+  semi_n_shot: 5
+  semi_n_query: 5
+  #Per set in use as default behaviour?
+  semi_k_way: 50
+  
+features:
+  raw: false
+  raw_pad: 123.456
+  seg_len: 0.200
+  hop_seg: 0.050
+  eps: 2.220446049250313e-16
+  fmax: 11025
+  fmin: 50
+  sr: 22050
+  n_fft: 1024
+  n_mels: 128
+  hop_mel: 256
 
 eval:
   use_fraction_neg: true
   use_fraction_pos: true
-  dataset: VAL
   script_path: ${root_path}/eval/prototypical_eval.py
-  samples_neg: -1 #Introduce number for 'all', ex -1
+  samples_neg: -1
   fraction_neg : 1
   samples_pos: -1
   fraction_pos: 1
@@ -89,3 +96,8 @@ eval:
   negative_set_batch_size: 200
   positive_set_batch_size: 20
   p_thresh: 0.5
+  
+  #Clustering
+  clustering: false
+  cluster_method: kmeans
+  cluster_K: 10

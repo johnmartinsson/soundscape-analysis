@@ -10,3 +10,6 @@ seed: 42
 writer:
     directory: none
     comment: none
+    
+type:
+    classifier: false
