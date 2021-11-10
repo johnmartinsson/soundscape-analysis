@@ -1,0 +1,56 @@
+
+#Gonna need an output directory
+#  -${output}
+#  | -- hfiles
+#       | -- train
+#         -- validation
+#         -- evaluation
+#         -- all
+
+#How to save normalization data?!
+#How to think about normalization?!
+
+set:
+    train: true
+    val: true
+    test: true
+    
+    #So this is intended to be the whole audio files for the training data.
+    #Should individual files be placed in seperate datasets?
+    #Why just stop at the training data? This could be done on the val/test files as well without any problem.
+    #We have the audio, what we don't have are the annotations.
+    #Possibly create one huge h5 file.
+    #file
+    #|-train
+    #  | - file#0
+    #  | - file#1 ...
+    #|-val
+    #  | - file#0
+    #  | - file#1 ...
+    #|-test
+    #  | - file#0
+    #  | - file#1 ...
+    #Would we also want seperate extraction parameters for this set? I can see that being useful.
+    extract_all: true
+
+path:
+    output: ???
+    data_train: /home/willbo/data/dcase/train
+    data_val: /home/willbo/data/dcase/val
+    data_test: /home/willbo/data/dcase/test
+    
+features:
+  raw: false
+  raw_pad: 123.456
+  seg_len: 0.200
+  hop_seg: 0.050
+  eps: 2.220446049250313e-16
+  fmax: 11025
+  fmin: 50
+  sr: 22050
+  n_fft: 1024
+  n_mels: 128
+  hop_mel: 256
+  
+train:
+    n_shot: 5

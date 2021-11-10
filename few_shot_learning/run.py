@@ -13,6 +13,8 @@ import numpy as np
 
 import utils
 
+#Perhaps we should consider moving over to hydra?
+
 def main(yaml_filepath, mode):
     """Run experiments."""
     cfgs = utils.load_cfgs(yaml_filepath)
@@ -29,7 +31,7 @@ def main(yaml_filepath, mode):
         module_optimizer     = utils.load_module(cfg['optimizer']['script_path'])
         module_loss_function = utils.load_module(cfg['loss_function']['script_path'])
         module_train         = utils.load_module(cfg['train']['script_path'])
-        #module_evaluate      = utils.load_module(cfg['evaluate']['script_path'])
+        module_eval          = utils.load_module(cfg['eval']['script_path'])
 
         pp = pprint.PrettyPrinter(indent=4)
         pp.pprint(cfg)
@@ -37,6 +39,16 @@ def main(yaml_filepath, mode):
         train_loader, valid_loader, test_loader = module_dataset.load_dataset(cfg['dataset'])
 
         model = module_model.load(cfg['model'])
+        #Should perhaps load different loaders depending on the mode
+        if mode == 'train':
+            train_loader, val_loader = module_dataset.get_dataloaders_train(cfg)
+        if mode == 'evaluate':
+            test_loader = module_dataset.get_dataloaders_test(cfg)
+        #train_loader, val_loader, test_loader = module_dataset.get_dataloaders(cfg['dataset'])
+        optimizer = module_optimizer.load(cfg, model)
+        loss_function = module_loss_function.load()
+        train_function = module_train.load()
+        eval_function = module_eval.load()
 
         optimizer = module_optimizer.load(model.parameters(), cfg['optimizer'])
         loss_function = module_loss_function.load(cfg['loss_function'])
@@ -47,10 +59,10 @@ def main(yaml_filepath, mode):
 
         # training mode
         if mode == 'train':
-            module_train.train(model, optimizer, loss_function, train_loader, valid_loader, cfg['train'])
+            train_function(model, optimizer, loss_function, train_loader, val_loader, cfg)
         # evaluation mode
         if mode == 'evaluate':
-            module_evaluate.evaluate(model, test_loader, cfg['evaluate'])
+            eval_function(model, test_loader, cfg)
 
 if __name__ == '__main__':
     args = utils.get_parser().parse_args()

@@ -2,15 +2,26 @@ import torch.nn as nn
 import torch
 
 #TODO introduce parametrization of conv blocks?
-class Protonet(nn.Module):
+class ClassifierProto(nn.Module):
     def __init__(self, raw_transformer=None):
-        super(Protonet,self).__init__()
+        super(ClassifierProto,self).__init__()
         self.raw_transformer = raw_transformer
         self.encoder = nn.Sequential(
             conv_block(1,128),
             conv_block(128,128),
             conv_block(128,128),
             conv_block(128,128)
+        )
+        '''
+        Create classifier here.
+        Feed forward, 1-2 layers, ReLU
+        emb have dimenasion 1024, I just know this from other parts of the code. But I should be able to calculate it. Need perhaps to recheck CNN's for the 50th time.
+        '''
+        self.clf = nn.Sequential(
+            nn.Linear(1024,1024),
+            nn.ReLU(),
+            nn.Linear(1024,19), #We have 19 classes right?
+            nn.ReLU()
         )
         
     def forward(self,x):
@@ -22,7 +33,11 @@ class Protonet(nn.Module):
         (num_samples,seq_len,mel_bins) = x.shape
         x = x.view(-1,1,seq_len,mel_bins)
         x = self.encoder(x)
-        return x.view(x.size(0),-1)
+        #return x.view(x.size(0),-1)
+        #return embedding and output from last layer.
+        embedding = x.view(x.size(0), -1)
+        out = self.clf(embedding) #Should have size (batch, num classes) right?
+        return embedding, out
 
 def conv_block(in_channels,out_channels):
 
@@ -35,4 +50,4 @@ def conv_block(in_channels,out_channels):
 
 def load(config):
     print('load model')
-    return Protonet()
+    return ClassifierProto()

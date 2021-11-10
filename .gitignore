@@ -91,6 +91,10 @@ ipython_config.py
 #   install all needed dependencies.
 #Pipfile.lock
 
+#Output folders
+few_shot_learning/multirun/
+few_shot_learning/outputs/
+
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
 __pypackages__/
 
@@ -132,3 +136,5 @@ dmypy.json
 /notebooks
 /datasets
 /loss_functions
+few_shot_learning/data/madagascar/client_secret.json
+few_shot_learning/data/madagascar/credentials.json

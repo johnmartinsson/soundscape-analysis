@@ -3,7 +3,6 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import numpy as np
 import utils
-import datasets.semisupervised as semi
 
 
 '''
@@ -55,16 +54,6 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
     if config.experiment.train.sampler == 'activequery':
         train_loader.batch_sampler.set_model(model)
         train_loader.batch_sampler.set_writer(writer)
-        
-    '''
-    Create dataloaders for the semi supervised training.
-    We should probably create batch samplers for this data right?
-    Make sure that a batch from the loader follows the same format as the training samples.
-    That is, align support and query properly.
-    '''
-    
-    if config.experiment.train.semi_supervised:
-        semi_iterator = iter(semi.get_semi_loader(config)) 
     
     for epoch in range(num_epochs):
         
@@ -73,25 +62,33 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
         
         print('Epoch {}'.format(epoch))
         train_iterator = iter(train_loader)
+        batch_nr = 0
         for batch in tqdm(train_iterator):
             optim.zero_grad()
             model.train()
             x, y = batch
             x = x.to(device)
             y = y.to(device)
-            x_out = model(x)
-            
-            semi_x = None
-            #Can VRAM handle this?
-            if config.experiment.train.semi_supervised:
-                semi_x, _ = next(semi_iterator)
-                semi_x = semi_x.to(device, dtype=torch.float)
-                semi_x = model(semi_x)
-            
-            
-            tr_loss, tr_acc = loss_function(x_out, y, config.experiment.train.n_shot, config, semi_x)
+            emb, x_out = model(x)
+            #TODO: We should possibly handle the loss handle here differently?
+            #This should most likely be some kind of argument no?
+            #Or is this OK since we already are in an application specific training loop?
+            tr_loss = loss_function(x_out, emb, y, config.experiment.train.n_shot, config)
             train_loss.append(tr_loss.item())
+            smax = torch.nn.functional.softmax(x_out)
+            y_pred = torch.argmax(smax, 1)
+            tr_acc = torch.sum(y == y_pred)/config.experiment.train.batch_size
             train_acc.append(tr_acc.item())
+            
+            #Did not end up like i wanted it to.
+            #Wanted to plot the loss/acc per batch in an epoch.
+            #Instead got every batch as a separate card.
+            #Also it overwrites every epoch
+
+            #writer.add_scalar('Loss/Batch'+str(batch_nr), tr_loss, batch_nr)
+            #writer.add_scalar('Accuracy/Batch'+str(batch_nr), tr_loss, batch_nr)
+
+            batch_nr += 1
 
             tr_loss.backward()
             optim.step()

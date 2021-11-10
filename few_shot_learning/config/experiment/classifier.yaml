@@ -1,0 +1,75 @@
+
+set:
+  train: true
+  eval: true
+  device: cuda
+
+#TODO fix root path stuff, check dcase, assumes data to be in repo in that casse ofc.
+#unless over written
+path:
+  features: /home/willbo/data/dcase/features
+  train_features: ${features}/hfiles/train
+  test_features: ${features}/hfiles/test
+  val_features: ${features}/hfiles/val
+  data_train: /home/willbo/data/dcase/train
+  data_val: /home/willbo/data/dcase/val
+  data_test: /home/willbo/data/dcase/test
+  best_model: best_model.pth
+  last_model: last_model.pth
+  
+  val_OG: /home/willbo/data/dcase/Validation_Set
+  test_OG: /home/willbo/data/dcase/Test_Set
+
+dataset:
+  script_path: ${root_path}/datasets/dcase_few_shot_bioacoustic.py
+
+model:
+  script_path: ${root_path}/models/classifier.py
+
+optimizer:
+  script_path: ${root_path}/optimizers/adam.py
+
+loss_function:
+  script_path: ${root_path}/loss_functions/crossentropy.py
+
+datagen:
+  raw: false
+  normalize: true
+  transpose: true
+  balance: true
+  ltoi: true
+  stratify: true
+
+train:
+  script_path: ${root_path}/train/classifier_train.py
+  artifacts_path: ${root_path}/datasets/artifacts 
+  sampler: random
+  num_classes: 15
+  n_shot: 5
+  n_query: 5
+  k_way : 10
+  lr: 0.0001
+  scheduler_gamma: 0.5
+  scheduler_step_size: 10
+  epochs: 15
+  batch_size: 50
+  
+  semi_supervised: false
+  semi_root_path: ${path.features}
+  semi_train_path: ${path.features}/hfiles/train/whole
+  semi_val_path: ${path.features}/hfiles/val
+  semi_test_path: ${path.features}/hfiles/test
+
+eval:
+  use_fraction_neg: true
+  use_fraction_pos: true
+  script_path: ${root_path}/eval/classifier_eval.py
+  samples_neg: -1 #Introduce number for 'all', ex -1
+  fraction_neg : 1
+  samples_pos: -1
+  fraction_pos: 1
+  iterations: 5
+  query_batch_size: 200
+  negative_set_batch_size: 200
+  positive_set_batch_size: 20
+  p_thresh: 0.5
