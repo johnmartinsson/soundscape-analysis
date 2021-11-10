@@ -101,3 +101,6 @@ eval:
   clustering: false
   cluster_method: kmeans
   cluster_K: 10
+  
+  smoothquery: false
+  smoothing: 4

@@ -9,6 +9,7 @@ import datasets.feature_extract as fe
 import datasets.randomepisode as re
 import datasets.activeepisode as ae
 import datasets.data_gen as dg
+import datasets.smoothquery as sq
 import models.prototypical as pt
 from sklearn.cluster import  KMeans
 
@@ -205,15 +206,16 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
     Y_query = torch.LongTensor(np.zeros(X_query.shape[0]))
 
     num_batch_query = len(Y_query) // config.experiment.eval.query_batch_size
-
-    query_dataset = torch.utils.data.TensorDataset(X_query, Y_query)
-    '''
-    Ok so we are not shuffling the queries here.
-    That is good. However we are assuming that they remain ordered right?.
-    That a query always represent time by it's index in the dataset?!
-    SUPER IMPORTANT!!!!
-    '''
-    q_loader = torch.utils.data.DataLoader(dataset=query_dataset, batch_sampler=None,batch_size=config.experiment.eval.query_batch_size,shuffle=False)
+    
+    if config.experiment.eval.smoothquery:
+        #Rough edges for now
+        query_dataset = sq.SmoothQuerySet(X_query, config.experiment.eval.smoothing)
+        b_size = math.floor(config.experiment.eval.query_batch_size/5)
+        q_loader = torch.utils.data.DataLoader(dataset=query_dataset, batch_sampler=None,batch_size=b_size,shuffle=False)
+    else:
+        query_dataset = torch.utils.data.TensorDataset(X_query, Y_query)
+        q_loader = torch.utils.data.DataLoader(dataset=query_dataset, batch_sampler=None,batch_size=config.experiment.eval.query_batch_size,shuffle=False)
+    
     if model is None:
         #This should also listen to the config for which model we uses.
         module_model = utils.load_module(config.experiment.model.script_path)
@@ -326,17 +328,35 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
         pos_proto =pos_proto.to(device)
         
         print('Processing queries')
-        for batch in tqdm(q_iterator):
-            x_q, y_q = batch
-            x_q = x_q.to(device)
-            if config.type.classifier:
-                x_query, _ = model(x_q)
-            else:
-                x_query = model(x_q)
-            #TODO: Expand this for several negative prototypes.
-            #probability_pos = get_probability(pos_proto, neg_proto, x_query)
-            probability_pos = get_probability_negdistance(pos_proto, neg_proto, x_query)
-            prob_pos_iter.extend(probability_pos)
+        #Just tape 'smooth query' into here for now, quick testing.
+        #A batch is 4d here. (batch_size, smoothing, -1, -1) -> (batch_size, -1)
+        if config.experiment.eval.smoothquery:
+            for batch in tqdm(q_iterator):
+                x_q = batch
+                x_q = x_q.to(device)
+                #outer dimension
+                embedded = torch.zeros(0,1024)
+                embedded = embedded.to(device)
+                for i in range(len(x_q)):
+                    tmp = model(x_q[i])
+                    embedded = torch.cat((embedded, tmp.mean(dim=0).reshape(1,-1)), dim=0)
+                probability_pos = get_probability_negdistance(pos_proto, neg_proto, embedded)
+                prob_pos_iter.extend(probability_pos)    
+        else:
+            
+            for batch in tqdm(q_iterator):
+                x_q, y_q = batch
+                x_q = x_q.to(device)
+                if config.type.classifier:
+                    x_query, _ = model(x_q)
+                else:
+                    x_query = model(x_q)
+                #TODO: Expand this for several negative prototypes.
+                #probability_pos = get_probability(pos_proto, neg_proto, x_query)
+                probability_pos = get_probability_negdistance(pos_proto, neg_proto, x_query)
+                prob_pos_iter.extend(probability_pos)
+            
+        
 
         prob_comb.append(prob_pos_iter)
         
