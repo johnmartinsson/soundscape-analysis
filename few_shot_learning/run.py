@@ -5,10 +5,10 @@
 
 import sys
 import pprint
-import logging
-logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
-                    level=logging.DEBUG,
-                    stream=sys.stdout)
+#import logging
+#logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
+#                    level=logging.DEBUG,
+#                    stream=sys.stdout)
 import numpy as np
 
 import utils
@@ -36,6 +36,8 @@ def main(yaml_filepath, mode):
         pp = pprint.PrettyPrinter(indent=4)
         pp.pprint(cfg)
 
+        train_loader, valid_loader, test_loader = module_dataset.load_dataset(cfg['dataset'])
+
         model = module_model.load(cfg['model'])
         #Should perhaps load different loaders depending on the mode
         if mode == 'train':
@@ -48,6 +50,10 @@ def main(yaml_filepath, mode):
         train_function = module_train.load()
         eval_function = module_eval.load()
 
+        optimizer = module_optimizer.load(model.parameters(), cfg['optimizer'])
+        loss_function = module_loss_function.load(cfg['loss_function'])
+
+
         #if 'initial_weights_path' in cfg['train']:
         #    model.load_weights(cfg['train']['initial_weights_path'])
 
@@ -57,7 +63,6 @@ def main(yaml_filepath, mode):
         # evaluation mode
         if mode == 'evaluate':
             eval_function(model, test_loader, cfg)
-
 
 if __name__ == '__main__':
     args = utils.get_parser().parse_args()
