@@ -23,11 +23,6 @@ import utils
 @hydra.main(config_path='config', config_name='config')
 def main(cfg):
     """Run experiments."""
-    #cfgs = utils.load_cfgs(yaml_filepath)
-    #print("Running {} experiments.".format(len(cfgs)))
-    #for cfg in cfgs:
-
-    #cfg = utils.make_paths_absolute(os.getcwd(), cfg)
       
     # Print the configuration - just to make sure that you loaded what you
     # wanted to load
@@ -40,10 +35,6 @@ def main(cfg):
     module_eval          = utils.load_module(cfg.experiment.eval.script_path)
 
     #Make this look pretty somehow
-    #pp = pprint.PrettyPrinter(indent=4)
-    #pp.pprint(cfg)
-    #print(cfg)
-    #pyaml.dump(cfg)
     print(OmegaConf.to_yaml(cfg))
     
     #Perhaps not best way to seed but.
@@ -63,9 +54,6 @@ def main(cfg):
     train_function = module_train.load()
     eval_function = module_eval.load()
 
-    #if 'initial_weights_path' in cfg['train']:
-    #    model.load_weights(cfg['train']['initial_weights_path'])
-    
     #This amount of configurability is probably enough for now.
     if cfg.writer.directory != 'none':
         writer = SummaryWriter(log_dir=cfg.writer.directory)
