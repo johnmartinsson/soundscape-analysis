@@ -17,4 +17,6 @@ A typical approach for few-shot learning is to learn a feature extractor __r = f
   - [Infinite Mixture Prototypes for Few-shot Learning](http://proceedings.mlr.press/v97/allen19b.html)
   - [Variational Few-Shot Learning](https://openaccess.thecvf.com/content_ICCV_2019/html/Zhang_Variational_Few-Shot_Learning_ICCV_2019_paper.html)
   - I did not know that people had done this already, and I like these ideas. Is there anything else to do in this direction? Or is it exhausted.
+
+## Example of how to run a script
 python runhydra.py hydra.run.dir=outputs/expout root_path=/home/willbo/repos/soundscape-analysis/few-shot/ +experiment=randomepisode experiment.train.epochs=30
