@@ -47,6 +47,9 @@ def get_semi_loader(config):
     #10 segments that cross the boundary of two files is abyssmal most likely
     
     #Should make it so it actually doesnt do this for sets we are not using
+    '''
+    TODO: Sanity check this logic.
+    '''
     idx['train'] = {'start': 0, 'end': 0}
     if config.experiment.train.semi_use_train:
         for tr_file in train_files:

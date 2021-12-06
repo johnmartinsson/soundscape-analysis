@@ -1,23 +1,12 @@
 import torch
 from torch.utils.tensorboard import SummaryWriter
+import torchaudio
+import torchaudio.transforms as Transforms
 from tqdm import tqdm
 import numpy as np
 import utils
 import datasets.semisupervised as semi
 
-
-'''
-Possibly write some helper function which takes the entire dataset and creates one prototype per class in the dataset based on a subset of
-the examples per class or from all examples. I think it could be of interest to see if these prototypes gets closer or further away from eachother.
-Still trying to build intuition for this and if this idea even makes any sense.
-
-What is most likely happening at validation/test time as we train the network further is that more and more segments gets closer to the positive prototype
-regardless of if it is a segment corresponding to an event or not.
-Why is this happening given our training procedure? 
-'''
-
-#Should the loaders be created in here instead? Based on some config stuff?
-#Talk about this
 def train(model, optimizer, loss_function, train_loader, val_loader, config, writer):
     
     if config.experiment.set.device == 'cuda':
@@ -55,16 +44,20 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
     if config.experiment.train.sampler == 'activequery':
         train_loader.batch_sampler.set_model(model)
         train_loader.batch_sampler.set_writer(writer)
-        
-    '''
-    Create dataloaders for the semi supervised training.
-    We should probably create batch samplers for this data right?
-    Make sure that a batch from the loader follows the same format as the training samples.
-    That is, align support and query properly.
-    '''
     
     if config.experiment.train.semi_supervised:
-        semi_iterator = iter(semi.get_semi_loader(config)) 
+        semi_iterator = iter(semi.get_semi_loader(config))
+        
+    if config.experiment.train.specaugment:
+        timeStretch = Transforms.TimeStretch(n_freq = config.experiment.features.n_mels)
+        if config.experiment.train.specaugment_iid_filters:
+            timeMask = Transforms.TimeMasking(config.experiment.train.time_mask_range, iid_masks = True)
+            freqMask = Transforms.FrequencyMasking(config.experiment.train.freq_mask_range, iid_masks = True)
+        else:
+            timeMask = Transforms.TimeMasking(config.experiment.train.time_mask_range)
+            freqMask = Transforms.FrequencyMasking(config.experiment.train.freq_mask_range)
+    
+    #
     
     for epoch in range(num_epochs):
         
@@ -77,14 +70,40 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             optim.zero_grad()
             model.train()
             x, y = batch
+            #Give more control over what from specaugment we want to use I think.
+            if config.experiment.train.specaugment:
+                x = torch.transpose(x, 1, 2)
+                time_stretch_range = config.experiment.train.time_stretch_range
+                stretch_factor = 1 + np.random.uniform(-time_stretch_range, time_stretch_range)
+                x = timeStretch(x.type(torch.complex64), stretch_factor).type(torch.float)
+                if config.experiment.train.specaugment_iid_filters:
+                    x = x.reshape(x.shape[0], 1, x.shape[1], x.shape[2])
+                x = freqMask(timeMask(x))
+                if config.experiment.train.specaugment_iid_filters:
+                    x = x.squeeze()
+                x = torch.transpose(x, 1, 2)
             x = x.to(device)
             y = y.to(device)
             x_out = model(x)
+            
+            if config.experiment.train.embedding_propagation:
+                x_out = torch.mm(global_consistency(get_similarity_matrix(x_out, 1), alpha=0.5), x_out)
             
             semi_x = None
             #Can VRAM handle this?
             if config.experiment.train.semi_supervised:
                 semi_x, _ = next(semi_iterator)
+                if config.experiment.train.specaugment:
+                    semi_x = torch.transpose(semi_x, 1, 2)
+                    time_stretch_range = config.experiment.train.time_stretch_range
+                    stretch_factor = 1 + np.random.uniform(-time_stretch_range, time_stretch_range)
+                    semi_x = timeStretch(semi_x.type(torch.complex64), stretch_factor).type(torch.float)
+                    if config.experiment.train.specaugment_iid_filters:
+                        semi_x = semi_x.reshape(semi_x.shape[0], 1, semi_x.shape[1], semi_x.shape[2])
+                    semi_x = freqMask(timeMask(semi_x))
+                    if config.experiment.train.specaugment_iid_filters:
+                        semi_x = semi_x.squeeze()
+                    semi_x = torch.transpose(semi_x, 1, 2)
                 semi_x = semi_x.to(device, dtype=torch.float)
                 semi_x = model(semi_x)
             
@@ -123,35 +142,49 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             best_state = model.state_dict()
             torch.save(best_state, best_model_path)
         
-        
-        '''
-        Old validation routine
-        
-        val_iterator = iter(val_loader)
-        for batch in tqdm(val_iterator):
-            x, y = batch
-            x = x.to(device)
-            x_val = model(x)
-            #TODO: ditto as above
-            valid_loss, valid_acc = loss_function(x_val, y, config.experiment.train.n_shot)
-            val_loss.append(valid_loss.item())
-            val_acc.append(valid_acc.item())
-        avg_loss_val = np.mean(val_loss[-num_batches_val:])
-        avg_acc_val = np.mean(val_acc[-num_batches_val:])
-
-        writer.add_scalar('Loss/val', avg_loss_val, epoch)
-        writer.add_scalar('Accuracy/val', avg_acc_val, epoch)
-        
-        print ('Epoch {}, Validation loss {:.4f}, Validation accuracy {:.4f}'.format(epoch,avg_loss_val,avg_acc_val))
-        if avg_acc_val > best_val_acc:
-            print("Saving the best model with valdation accuracy {}".format(avg_acc_val))
-            best_val_acc = avg_acc_val
-            best_state = model.state_dict()
-            torch.save(model.state_dict(),best_model_path)
-        '''
     torch.save(model.state_dict(),last_model_path)
 
     return best_val_fmeasure, model, best_state
+
+'''
+Embedding propagation code.
+I am somewhat unsure about this. The code is taken from the repo posten in the paper.
+Is the code a reflection of the procedure posted in the paper? I don't know.
+Should we write our own code. Have been playing around with this in a notebook.
+'''
+
+def get_similarity_matrix(x, rbf_scale):
+    b, c = x.size()
+    sq_dist = ((x.view(b, 1, c) - x.view(1, b, c))**2).sum(-1) / np.sqrt(c)
+    mask = sq_dist != 0
+    sq_dist = sq_dist / sq_dist[mask].std()
+    weights = torch.exp(-sq_dist * rbf_scale)
+    mask = torch.eye(weights.size(1), dtype=torch.bool, device=weights.device)
+    weights = weights * (~mask).float()
+    return weights
+
+def global_consistency(weights, alpha=1, norm_prop=False):
+    """Implements D. Zhou et al. "Learning with local and global consistency". (Same as in TPN paper but without bug)
+    Args:
+        weights: Tensor of shape (n, n). Expected to be exp( -d^2/s^2 ), where d is the euclidean distance and
+            s the scale parameter.
+        labels: Tensor of shape (n, n_classes)
+        alpha: Scaler, acts as a smoothing factor
+    Returns:
+        Tensor of shape (n, n_classes) representing the logits of each classes
+    """
+    n = weights.shape[1]
+    identity = torch.eye(n, dtype=weights.dtype, device=weights.device)
+    isqrt_diag = 1. / torch.sqrt(1e-4 + torch.sum(weights, dim=-1))
+    # checknan(laplacian=isqrt_diag)
+    S = weights * isqrt_diag[None, :] * isqrt_diag[:, None]
+    # checknan(normalizedlaplacian=S)
+    propagator = identity - alpha * S
+    propagator = torch.inverse(propagator[None, ...])[0]
+    # checknan(propagator=propagator)
+    if norm_prop:
+        propagator = F.normalize(propagator, p=1, dim=-1)
+    return propagator
 
 def load():
     return train

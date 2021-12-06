@@ -79,13 +79,13 @@ def eval_help(model, test_loader, config, writer, tag):
         '''
         csv_path = 'VAL_out.csv'
         df_out.to_csv(csv_path,index=False)
-        util.post_processing(config.experiment.path.data_val, csv_path, 'PP_'+csv_path)
+        util.post_processing(csv_path, 'PP_'+csv_path, tag, config)
         scores = util.evaluate('PP_'+csv_path, config.experiment.path.val_OG, tag, './')
         
     elif tag == 'TEST':
         csv_path = 'TEST_out.csv'
         df_out.to_csv(csv_path,index=False)
-        util.post_processing(config.experiment.path.data_test, csv_path, 'PP_'+csv_path)
+        util.post_processing(csv_path, 'PP_'+csv_path, tag, config)
         scores = util.evaluate('PP_'+csv_path, config.experiment.path.test_OG, tag, './')
         if writer is not None:
             writer.add_scalar(tag+'_fmeasure', scores['fmeasure (percentage)'])

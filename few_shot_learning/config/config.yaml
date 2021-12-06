@@ -3,7 +3,7 @@ root_path: randompath
 #organized when it comes to paths/file names/h5 datasets.
 
 defaults:
-    - experiment/activequery
+    - experiment/randomepisode
 
 seed: 42
 

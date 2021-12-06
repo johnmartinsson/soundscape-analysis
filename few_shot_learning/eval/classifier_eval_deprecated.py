@@ -11,15 +11,17 @@ from glob import glob
 import h5py
 import csv
 
+#Do we like this relative import?
+
 '''
-This file requires additional work I feel.
-Why not pack pre-processing and actual metric into here.
-Spit out eval.csv -> ppeval.csv -> score
-Tensorboard the score?
-How to pass writer around?
+2021/11/29:
+At the current moment I can't see what use we have of this file?
+There is literally no difference between this and prototypical eval.
+Good practice is to not use this anymore. Rename file for now.
 '''
 
-#Do we like this relative import?
+
+
 import datasets.dcase_few_shot_bioacoustic as util
 
 #TODO: Have writer add scalar for fmeasure/precision/recall.
@@ -98,7 +100,9 @@ def eval_help(model, test_loader, config, writer, tag):
     
     return scores
     
-    
+'''
+Why is this block of code even here?
+
 def dummy_choice(csv, n_shots):
     events = []
     for i in range(len(csv)):
@@ -108,22 +112,7 @@ def dummy_choice(csv, n_shots):
 
 #Might wanna check the paths here and if we are please with the output.
 def post_processing(val_path, evaluation_file, new_evaluation_file, n_shots=5):
-    '''Post processing of a prediction file by removing all events that have shorter duration
-    than 60% of the minimum duration of the shots for that audio file.
     
-    Parameters
-    ----------
-    val_path: path to validation set folder containing subfolders with wav audio files and csv annotations
-    evaluation_file: .csv file of predictions to be processed
-    new_evaluation_file: .csv file to be saved with predictions after post processing
-    n_shots: number of available shots
-    '''
-    
-    '''
-    I think it is of great interest to not just choose the first five positives in practice.
-    Sure this is part of the challenge. But... Interesting to invesigate. Discussion about growing
-    number of supports can fit here to?
-    '''
     
     csv_files = [file for file in glob(os.path.join(val_path, '*.csv'))]
     
@@ -157,7 +146,9 @@ def post_processing(val_path, evaluation_file, new_evaluation_file, n_shots=5):
         writer = csv.writer(f)
         writer.writerows(new_results)
 
-
+'''
+    
+    
 def load():
     return eval
 

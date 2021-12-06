@@ -22,13 +22,13 @@ dataset:
   script_path: ${root_path}/datasets/dcase_few_shot_bioacoustic.py
 
 model:
-  script_path: ${root_path}/models/classifier.py
+  script_path: ${root_path}/models/prototypical.py
 
 optimizer:
   script_path: ${root_path}/optimizers/adam.py
 
 loss_function:
-  script_path: ${root_path}/loss_functions/crossentropy.py
+  script_path: ${root_path}/loss_functions/semiprototypicalloss.py
 
 datagen:
   raw: false
@@ -39,7 +39,7 @@ datagen:
   stratify: true
 
 train:
-  script_path: ${root_path}/train/classifier_train.py
+  script_path: ${root_path}/train/prototypical_train.py
   artifacts_path: ${root_path}/datasets/artifacts 
   sampler: random
   num_classes: 15
@@ -47,17 +47,38 @@ train:
   n_query: 5
   k_way : 10
   lr: 0.0001
+  l2: 0
   scheduler_gamma: 0.5
   scheduler_step_size: 10
   epochs: 15
-  batch_size: 50
   
-    #Specaugment parameters
+  semi_supervised: true
+  semi_root_path: ${experiment.path.features}
+  semi_train_path: ${experiment.train.semi_root_path}/hfiles/train/whole
+  semi_val_path: ${experiment.train.semi_root_path}/hfiles/val
+  semi_test_path: ${experiment.train.semi_root_path}/hfiles/test
+  
+  #Gonna need more config options here
+  semi_use_train: true
+  semi_use_val: false
+  semi_use_test: false
+  
+  semi_n_shot: 5
+  semi_n_query: 5
+  #Per set in use as default behaviour?
+  semi_k_way: 10
+  
+  #Specaugment parameters
   specaugment: false
   specaugment_iid_filters: true
   time_stretch_range: 0.1
   time_mask_range: 5
   freq_mask_range: 20
+  
+  embedding_propagation: false
+  
+  #Should we also have some background mixing here?
+  #I saw some other interesting augmentation techniques beyond specaugment in some paper
   
 features:
   raw: false
@@ -71,12 +92,12 @@ features:
   n_fft: 1024
   n_mels: 128
   hop_mel: 256
-  
+
 eval:
   use_fraction_neg: true
   use_fraction_pos: true
-  script_path: ${root_path}/eval/prototypical_eval.py #Same as for prot models
-  samples_neg: -1 
+  script_path: ${root_path}/eval/prototypical_eval.py
+  samples_neg: -1
   fraction_neg : 1
   samples_pos: -1
   fraction_pos: 1
@@ -97,6 +118,6 @@ eval:
   pp_remove_shorts : true
   shorts_min_duration : 10000
   
-  pp_median_filter : true
-  mfilter_tick_rate : 24000
+  pp_median_filter : false
+  mfilter_tick_rate : 12000
   mfilter_avg_portion : 0.33

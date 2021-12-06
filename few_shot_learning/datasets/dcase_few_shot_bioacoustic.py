@@ -10,6 +10,7 @@ import datasets.randomepisode as re
 import datasets.activeepisode as ae
 import datasets.data_gen as dg
 import datasets.smoothquery as sq
+import datasets.specaugmentset as sas
 import models.prototypical as pt
 from sklearn.cluster import  KMeans
 
@@ -23,6 +24,10 @@ from datetime import datetime
 import copy
 from scipy import stats
 from glob import glob
+
+from collections import defaultdict
+
+from multiprocessing import Pool
 
 
 def time_2_frame(df,fps):
@@ -284,7 +289,8 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
         #Else return shape (K, emb_dim)
         #The get probability function can work with both
         
-        neg_set_feat = torch.zeros(0,1024).cpu()
+        #neg_set_feat = torch.zeros(0,1024).cpu()
+        neg_set_feat = []
         print('Processing negatives')
         for batch in tqdm(neg_iterator):
             x_neg, y_neg = batch
@@ -295,7 +301,11 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
             else:
                 feat_neg = model(x_neg)
             feat_neg = feat_neg.detach().cpu()
-            neg_set_feat = torch.cat((neg_set_feat, feat_neg), dim=0)
+            #neg_set_feat = torch.cat((neg_set_feat, feat_neg), dim=0)
+            for e in feat_neg:
+                neg_set_feat += [e]
+            
+        neg_set_feat = torch.stack(neg_set_feat)
         
         #Does this work? Eh I think it does actually, first try ezi pizi #NOPE
         if config.experiment.eval.clustering:
@@ -313,7 +323,8 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
             num_neg_prot = 1
         
         
-        pos_set_feat = torch.zeros(0,1024).cpu()
+        #pos_set_feat = torch.zeros(0,1024).cpu()
+        pos_set_feat = []
         print('Processing positives')
         for batch in tqdm(pos_iterator):
             x_pos, y_pos = batch
@@ -323,7 +334,11 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
             else:
                 feat_pos = model(x_pos)
             feat_pos = feat_pos.detach().cpu()
-            pos_set_feat = torch.cat((pos_set_feat, feat_pos), dim=0)
+            #pos_set_feat = torch.cat((pos_set_feat, feat_pos), dim=0)
+            for e in feat_pos:
+                pos_set_feat += [e]
+           
+        pos_set_feat = torch.stack(pos_set_feat)
         pos_proto = pos_set_feat.mean(dim=0)
         pos_proto =pos_proto.to(device)
         
@@ -335,10 +350,13 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
                 x_q = batch
                 x_q = x_q.to(device)
                 #outer dimension
-                embedded = torch.zeros(0,1024)
+                embedded = torch.zeros(0,x_q.shape[1])
                 embedded = embedded.to(device)
                 for i in range(len(x_q)):
-                    tmp = model(x_q[i])
+                    if config.type.classifier:
+                        tmp, _ = model(x_q[i])
+                    else:
+                        tmp = model(x_q[i])
                     embedded = torch.cat((embedded, tmp.mean(dim=0).reshape(1,-1)), dim=0)
                 probability_pos = get_probability_negdistance(pos_proto, neg_proto, embedded)
                 prob_pos_iter.extend(probability_pos)    
@@ -415,9 +433,8 @@ def get_dataloaders_train(config):
     num_batches_tr = len(Y_train)//batch_size_tr
     #num_batches_vd = len(Y_val)//batch_size_vd
     
-    
     train_set = torch.utils.data.TensorDataset(X_tr, Y_tr)
-    #val_set = torch.utils.data.TensorDataset(X_val, Y_val)
+    
     
     if config.experiment.train.sampler == 'random':
         tr_sampler = re.RandomEpisodicSampler(Y_train, num_batches_tr, config.experiment.train.k_way,
@@ -453,7 +470,9 @@ def get_dataloaders_test(config):
 ########################################################################################
 ########################################################################################
 
-#For selection of positives to be used?
+'''
+### Post-processing pipe ###
+'''
 def dummy_choice(csv, n_shots):
     events = []
     for i in range(len(csv)):
@@ -461,64 +480,189 @@ def dummy_choice(csv, n_shots):
                     events.append(csv.loc[i].values)
     return events
 
-#Consider own file for this!
-#Should we use validation or test data for this?????
-#Test data most likely?
-#Since eval is done on test data right?
-def post_processing(test_path, evaluation_file, new_evaluation_file, n_shots=5):
-    '''Post processing of a prediction file by removing all events that have shorter duration
+def post_processing(evaluation_file, new_evaluation_file, tag, config):
+    
+    pred_file = open(evaluation_file, newline='')
+    pred_reader = csv.reader(pred_file, delimiter=',')
+    predictions = []
+    for e in pred_reader:
+        predictions.append(e)
+    
+    if config.experiment.eval.pp_median_filter:
+        predictions = median_filter(predictions, tag, config)
+    if config.experiment.eval.pp_remove_shorts:
+        predictions = remove_short(predictions, tag, config)
+    
+    with open(new_evaluation_file, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows(predictions)
+
+#Remove short duration events post processing
+def remove_short(predictions, tag, config):
+    
+    '''
+    Post processing of a prediction file by removing all events that have shorter duration
     than 60% of the minimum duration of the shots for that audio file.
-    
-    Parameters
-    ----------
-    val_path: path to validation set folder containing subfolders with wav audio files and csv annotations
-    evaluation_file: .csv file of predictions to be processed
-    new_evaluation_file: .csv file to be saved with predictions after post processing
-    n_shots: number of available shots
     '''
     
-    '''
-    I think it is of great interest to not just choose the first five positives in practice.
-    Sure this is part of the challenge. But... Interesting to invesigate. Discussion about growing
-    number of supports can fit here to?
+    print('Removing short duration events')
     
-    Perhaps we can add some post-processing smoothing. That is if there is a small gap in what is believed to be an event than this is converted.
-    ________****_*****___________ -> _______*********_________
-    '''
-    
-    print(test_path)
-    csv_files = [file for file in glob(os.path.join(test_path, '*.csv'))]
-    
+    if tag == 'VAL':
+        csv_files = [file for file in glob(os.path.join(config.experiment.path.data_val, '*.csv'))]
+    elif tag == 'TEST':
+        csv_files = [file for file in glob(os.path.join(config.experiment.path.data_test, '*.csv'))]
+        
     dict_duration = {}
     for csv_file in csv_files:
         audiofile = csv_file.replace('.csv', '.wav')
         df = pd.read_csv(csv_file)
-        events = dummy_choice(df, n_shots)
-        min_duration = 10000 #configurable?
+        events = dummy_choice(df, config.experiment.train.n_shot)
+        min_duration = config.experiment.eval.shorts_min_duration
         for event in events:
             if float(event[2])-float(event[1]) < min_duration:
                 min_duration = float(event[2])-float(event[1])
         #dict_duration[audiofile] = min_duration
         dict_duration[os.path.split(audiofile)[1]] = min_duration
-
-    results = []
-    with open(evaluation_file, newline='') as csvfile:
-        reader = csv.reader(csvfile, delimiter=',')
-        next(reader, None)  # skip the headers
-        for row in reader:
-            results.append(row)
-
-    new_results = [['Audiofilename', 'Starttime', 'Endtime']]
-    for event in results:
+        
+    new_predictions = [['Audiofilename', 'Starttime', 'Endtime']]
+    for event in predictions[1:]:
         audiofile = os.path.split(event[0])[1]
         min_dur = dict_duration[audiofile]
         if float(event[2])-float(event[1]) >= 0.6*min_dur:
-            new_results.append([os.path.split(event[0])[1], event[1], event[2]])
+            new_predictions.append([os.path.split(event[0])[1], event[1], event[2]])
 
-    with open(new_evaluation_file, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerows(new_results)
+    return new_predictions
 
+#Median filtering of predicted events.
+def median_filter(predictions, tag, config):
+    
+    num_proc = 16
+    pool = Pool(processes=num_proc)
+    
+    #Number of ticks per second
+    rate = config.experiment.eval.mfilter_tick_rate
+    increment = 1.0/rate
+    
+    #dict with prediction onset and offsets split over audiofiles
+    pred_dict = defaultdict(list)
+    
+    #Skip header
+    for i in range(1,len(predictions)):
+        pred_dict[predictions[i][0]].append([predictions[i][1], predictions[i][2]])
+    
+    new_predictions = []
+    #Attach header
+    new_predictions.append(predictions[0])
+    
+    print('Median filtering')
+    
+    for key in tqdm(pred_dict.keys()):
+        
+        #Go from onset offset predictions to array with binary elements indicating events
+        index = 0.0
+        prediction_array = []
+        for event in pred_dict[key]:
+            while index < float(event[0]):
+                prediction_array += [0]
+                index += increment
+            while index < float(event[1]):
+                prediction_array += [1]
+                index += increment
+        
+        #How should we think around this window size?
+        #Can we base it per file?
+        if tag == 'VAL':
+            csv_files = [file for file in glob(os.path.join(config.experiment.path.data_val, '*.csv'))]
+        elif tag == 'TEST':
+            csv_files = [file for file in glob(os.path.join(config.experiment.path.data_test, '*.csv'))]
+            
+        dict_duration = {}
+        for csv_file in csv_files:
+            audiofile = csv_file.replace('.csv', '.wav')
+            df = pd.read_csv(csv_file)
+            events = dummy_choice(df, config.experiment.train.n_shot)
+            duration = 0.0 
+            for event in events:
+                duration += float(event[2])-float(event[1])
+                    
+            #dict_duration[audiofile] = min_duration
+            #One third of the average duration of the shots. Use this as window lenght, ezi pizi.
+            #In seconds
+            dict_duration[os.path.split(audiofile)[1]] = config.experiment.eval.mfilter_avg_portion*(duration/config.experiment.train.n_shot)
+        #print('Using window size: '+str(dict_duration[key])+' for file: '+key)
+        w_size = dict_duration[key] #in s, whole size of window, so from left of index to right = 0.05s
+        #TODO: I am unsure if this should actually be divided by 2. I did this when extending that size to both left and right
+        #but the implemented method just want window size and then centers it at the index in question!
+        '''
+        TODO: Implement multiprocessing here.
+        split prediction array as done in the notebook 'Workshop' working with indexes.
+        Don't forget to check if window size is odd, if not correct it.
+        Aggregate worker results and simply call this filtered array, ezi pizi.
+        '''
+        
+        prediction_array = np.array(prediction_array)
+        
+        w_size = math.floor(w_size/increment)
+        
+        if w_size % 2 == 0:
+            w_size += 1
+        
+        d = math.floor(len(prediction_array)/num_proc)
+            
+        ixs = []
+        for i in range(num_proc):
+            if i == (num_proc-1):
+                ixs += [list(range(i*d-int((w_size-1)/2), len(prediction_array)))]
+            else:    
+                ixs += [list(range(max(0, i*d-int((w_size-1)/2)), (i+1)*d+int((w_size-1)/2)))]
+
+        worker_output = pool.map(worker_filter_array, [(w_size, prediction_array[ix]) for ix in ixs])
+        w_filtered_array = []
+        
+        for i in range(len(worker_output)):
+            if i == 0:
+                w_filtered_array += [worker_output[i][0:len(worker_output[i])-int((w_size-1)/2)]]
+            elif i == len(worker_output)-1:
+                w_filtered_array += [worker_output[i][int((w_size-1)/2):len(worker_output[i])]]
+            else:
+                w_filtered_array += [worker_output[i][int((w_size-1)/2):len(worker_output[i])-int((w_size-1)/2)]]
+        
+        filtered_array = np.zeros(0)
+        for e in w_filtered_array:
+            filtered_array = np.append(filtered_array, e)
+        #filtered_array = median_filter_array(prediction_array, math.floor(w_size/(*increment)))
+        
+        #Reverse from array with binary elements indicating events to onset offset predictions
+        krn = [1, -1]
+        changes = np.convolve(filtered_array, krn)
+        onsets = np.where(changes == 1)
+        offsets = np.where(changes == -1)
+        events = list(zip(onsets[0], offsets[0]))
+        new_events = []
+        for e in events:
+            new_events.append([e[0]*increment, e[1]*increment])
+        pred_dict[key] = new_events
+        
+    
+    #Assume new predictions to be in a dictionary with files as keys and elements being [onset, offset]
+    for key in pred_dict.keys():
+        for e in pred_dict[key]:
+            new_predictions.append([key, e[0], e[1]])
+    
+    return new_predictions
+
+# t tuple (w_size, array)
+def worker_filter_array(t):
+    return scipy.ndimage.median_filter(t[1], size=t[0], mode='nearest')
+    
+def median_filter_array(array, window_size):
+    return scipy.ndimage.median_filter(array, size=window_size, mode='nearest')
+
+
+
+'''
+### END Post-processing pipe ###
+'''
 
 def fast_intersect(ref, est):
     """Find all intersections between reference events and estimated events (fast).

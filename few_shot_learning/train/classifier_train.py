@@ -10,6 +10,8 @@ import numpy as np
 import datasets.data_gen as dg
 import utils
 
+import torchaudio
+import torchaudio.transforms as Transforms
 
 '''
 Possibly write some helper function which takes the entire dataset and creates one prototype per class in the dataset based on a subset of
@@ -23,6 +25,14 @@ Why is this happening given our training procedure?
 
 #Should the loaders be created in here instead? Based on some config stuff?
 #Talk about this
+
+'''
+2021/11/29 TODO:
+Fix specaugment.
+Check if there are other differences compared to prototypical train.
+For example config pointers etc..
+'''
+
 def train(model, optimizer, loss_function, train_loader, val_loader, config, writer):
     
     if config.experiment.set.device == 'cuda':
@@ -57,6 +67,9 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
     Band-aid fix: For now ignore the train_loader and just make a new one here.
     Makes it easier to at the moment ignore that the dcase file contains methods
     for episodic training. Whatever.
+    
+    TODO: This is problematic the more features we add, for example now adding specaugment.
+    Replication of code -> BAD!
     '''
     datagen = dg.Datagen(config)
     X_train, Y_train = datagen.generate_train()
@@ -73,7 +86,16 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
     if config.experiment.train.sampler == 'activequery':
         train_loader.batch_sampler.set_model(model)
         train_loader.batch_sampler.set_writer(writer)
-    
+        
+    if config.experiment.train.specaugment:
+        timeStretch = Transforms.TimeStretch(n_freq = config.experiment.features.n_mels)
+        if config.experiment.train.specaugment_iid_filters:
+            timeMask = Transforms.TimeMasking(config.experiment.train.time_mask_range, iid_masks = True)
+            freqMask = Transforms.FrequencyMasking(config.experiment.train.freq_mask_range, iid_masks = True)
+        else:
+            timeMask = Transforms.TimeMasking(config.experiment.train.time_mask_range)
+            freqMask = Transforms.FrequencyMasking(config.experiment.train.freq_mask_range)
+            
     for epoch in range(num_epochs):
         
         if config.experiment.train.sampler == 'activequery':
@@ -86,6 +108,17 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             optim.zero_grad()
             model.train()
             x, y = batch
+            if config.experiment.train.specaugment:
+                x = torch.transpose(x, 1, 2)
+                time_stretch_range = config.experiment.train.time_stretch_range
+                stretch_factor = 1 + np.random.uniform(-time_stretch_range, time_stretch_range)
+                x = timeStretch(x.type(torch.complex64), stretch_factor).type(torch.float)
+                if config.experiment.train.specaugment_iid_filters:
+                    x = x.reshape(x.shape[0], 1, x.shape[1], x.shape[2])
+                x = freqMask(timeMask(x))
+                if config.experiment.train.specaugment_iid_filters:
+                    x = x.squeeze()
+                x = torch.transpose(x, 1, 2)
             x = x.to(device)
             y = y.to(device)
             emb, x_out = model(x)

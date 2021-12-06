@@ -4,7 +4,6 @@ set:
   eval: true
   device: cuda
 
-#Is it not just simpler to point to a feature root directory. Makes it simpler to not fuck up.
 path:
   features: /home/willbo/data/dcase/features
   train_features: ${experiment.path.features}/hfiles/train
@@ -31,7 +30,6 @@ optimizer:
 loss_function:
   script_path: ${root_path}/loss_functions/prototypicalloss.py
 
-#Not really important for just extraction right?
 datagen:
   raw: false
   normalize: true
@@ -55,7 +53,7 @@ train:
   epochs: 15
   
   semi_supervised: false
-  semi_root_path: /home/willbo/data/dcase/features_nolap
+  semi_root_path: ${experiment.path.features}
   semi_train_path: ${experiment.train.semi_root_path}/hfiles/train/whole
   semi_val_path: ${experiment.train.semi_root_path}/hfiles/val
   semi_test_path: ${experiment.train.semi_root_path}/hfiles/test
@@ -69,6 +67,18 @@ train:
   semi_n_query: 5
   #Per set in use as default behaviour?
   semi_k_way: 50
+  
+  #Specaugment parameters
+  specaugment: false
+  specaugment_iid_filters: true
+  time_stretch_range: 0.1
+  time_mask_range: 5
+  freq_mask_range: 20
+  
+  embedding_propagation: false
+  
+  #Should we also have some background mixing here?
+  #I saw some other interesting augmentation techniques beyond specaugment in some paper
   
 features:
   raw: false
@@ -104,3 +114,10 @@ eval:
   
   smoothquery: false
   smoothing: 4
+  
+  pp_remove_shorts : true
+  shorts_min_duration : 10000
+  
+  pp_median_filter : true
+  mfilter_tick_rate : 12000
+  mfilter_avg_portion : 0.33
