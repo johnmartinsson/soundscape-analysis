@@ -9,3 +9,7 @@ run
 # Configure config/extraction.yaml
 - path:
 	data_train: <should point to the train directory> etc
+
+Make sure to also download the Evaluation_Set_Full_Annotations.zip and copy the *.csv files to both the train/ and the respective subdirectory in Test_Set.
+
+
