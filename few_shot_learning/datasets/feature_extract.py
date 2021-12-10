@@ -75,6 +75,19 @@ class SpectralFeatureExtractor(FeatureExtractor):
             #Not pleased actually.
             pcen = self.spectralizer.raw_to_spec(audio, self.config)
             
+            
+            '''
+            TODO: We should only extract segments without no annotations or all annotations being NEG.
+            At least for use in the semi approach. We could do some statistics on the annotations files to find out as well if it is nessecary.
+            
+            Create some inverted time_2_frame? Give onset/offset of parts without annotations?
+            We increasingly run into the problem of choosing edges though right?
+            Is there an easy way of handeling this?
+            The best might just to simply use other audio sources. No headache really, if the files are long.
+            
+            Can we use this method with just empty annotations files?
+            '''
+            
             if self.config.set.extract_all:
                 print('Extracting all segments')
                 split_list = file.split('/')

@@ -94,6 +94,7 @@ ipython_config.py
 #Output folders
 few_shot_learning/multirun/
 few_shot_learning/outputs/
+few_shot_learning/outputs_old/
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
 __pypackages__/

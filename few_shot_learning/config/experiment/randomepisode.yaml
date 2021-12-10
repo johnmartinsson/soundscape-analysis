@@ -77,6 +77,11 @@ train:
   
   embedding_propagation: false
   
+  mix_background: false
+  background_other_source : false
+  background_path : ???
+  background_ediff : true
+  
   #Should we also have some background mixing here?
   #I saw some other interesting augmentation techniques beyond specaugment in some paper
   

@@ -72,7 +72,9 @@ def main(cfg):
     # evaluation mode
     if cfg.experiment.set.eval:
         eval_function(model, test_loader, cfg, writer)
-
-
+    
+    if writer is not None:
+        writer.close()
+    
 if __name__ == '__main__':
     main()

@@ -17,6 +17,10 @@ def get_semi_loader(config):
     
     print('Creating semi supervised loader')
     
+    '''
+    Build dataset, somehow keep track of indices.
+    We can maybe have some struct like object for this and pass it to the sampler.
+    '''
     train_files = [file for file in glob(os.path.join(config.experiment.train.semi_train_path, '*.h5'))]
     val_files = [file for file in glob(os.path.join(config.experiment.train.semi_val_path, '*.h5'))]
     test_files = [file for file in glob(os.path.join(config.experiment.train.semi_test_path, '*.h5'))]
@@ -40,54 +44,53 @@ def get_semi_loader(config):
     
     data = np.empty(shape=(0,train_shape[0],train_shape[1]))
     
+    #Would ultimately like to have even more information about the indexes right?
+    #Like per file more or less. Disregard this at the moment. The probability of repeatedly choosing 
+    #10 segments that cross the boundary of two files is abyssmal most likely
+    
+    #Should make it so it actually doesnt do this for sets we are not using
+    '''
+    TODO: Sanity check this logic.
+    '''
     
     '''
     I like this approach overall since you can point to any 'train' folder that you like.
     Doesn't have to be the train folder of the base dataset.
-    
-    ####   We can however refine it to not work over files? DONE!!! #####
+    We can however refine it to not work over files?
+    This is a TODO for sure. And it should probably be done here!
     
     In future we need to do something vastly different here. Can't just hold the data in memory!
     '''
     
-    idx['train'] = {}
-    #idx['train'] = {'start': 0, 'end': 0}
-    #len_train = 0
+    idx['train'] = {'start': 0, 'end': 0}
+    len_train = 0
     if config.experiment.train.semi_use_train:
         for tr_file in train_files:
             hf = h5py.File(tr_file)
-            idx['train'][tr_file] = {'start' : len(data), 'end' : 0}
             data = np.concatenate((data, hf['feat_neg'][:]), axis=0)
-            idx['train'][tr_file]['end'] = len(data)
             hf.close()
-        #len_train = len(data)
-        #idx['train']['end'] = len_train
+        len_train = len(data)
+        idx['train']['end'] = len_train
     
-    #idx['val'] = {'start': idx['train']['end'], 'end': 0}
-    #len_val = 0
-    idx['val'] = {}
+    idx['val'] = {'start': idx['train']['end'], 'end': 0}
+    len_val = 0
     if config.experiment.train.semi_use_val:
         for v_file in val_files:
             hf = h5py.File(v_file)
-            idx['val'][v_file] = {'start' : len(data), 'end' : 0}
             data = np.concatenate((data, hf['feat_neg'][:]), axis=0)
-            idx['val'][v_file]['end'] = len(data)
             hf.close()
-        #len_val = len(data) - len_train
-        #idx['val']['end'] = idx['val']['start'] + len_val
+        len_val = len(data) - len_train
+        idx['val']['end'] = idx['val']['start'] + len_val
     
-    idx['test'] = {}
-    #idx['test'] = {'start': idx['val']['end'], 'end': 0}
-    #len_test = 0
+    idx['test'] = {'start': idx['val']['end'], 'end': 0}
+    len_test = 0
     if config.experiment.train.semi_use_test:
         for te_file in test_files:
             hf = h5py.File(te_file)
-            idx['test'][te_file] = {'start' : len(data), 'end' : 0}
             data = np.concatenate((data, hf['feat_neg'][:]), axis=0)
-            idx['test'][te_file]['end'] = len(data)
             hf.close()
-        #len_test = len(data) - len_val - len_train
-        #idx['test']['end'] = idx['test']['start'] + len_test
+        len_test = len(data) - len_val - len_train
+        idx['test']['end'] = idx['test']['start'] + len_test
     
     sampler = SemiSupervisedSampler(config, idx)
     
@@ -109,7 +112,6 @@ class SemiSupervisedSampler(data.Sampler):
         self.config = config
         self.idx = idx
         
-        '''
         #could be redone but whatever
         self.idx_in_use = torch.zeros(0, dtype=int)
         if config.experiment.train.semi_use_train:
@@ -118,7 +120,7 @@ class SemiSupervisedSampler(data.Sampler):
             self.idx_in_use = torch.cat((self.idx_in_use, torch.arange(idx['val']['start'], idx['val']['end'])))
         if config.experiment.train.semi_use_test:
             self.idx_in_use = torch.cat((self.idx_in_use, torch.arange(idx['test']['start'], idx['test']['end'])))
-        '''
+        
         
     def __len__(self):
         #Large number
@@ -132,29 +134,6 @@ class SemiSupervisedSampler(data.Sampler):
             batch = torch.zeros(0, dtype=int)
             num_segments = self.config.experiment.train.semi_n_shot + self.config.experiment.train.semi_n_query
             
-            if self.config.experiment.train.semi_use_train:
-                for i in range(self.config.experiment.train.semi_k_way):
-                    indexes = self.idx['train'][np.random.choice(list(self.idx['train'].keys()))]
-                    tr_i = torch.arange(indexes['start'], indexes['end'])
-                    r = np.random.randint(0, len(tr_i)-num_segments)
-                    batch = torch.cat((batch, tr_i[r:r+num_segments]))
-                    
-            if self.config.experiment.train.semi_use_val:
-                for i in range(self.config.experiment.train.semi_k_way):
-                    indexes = self.idx['val'][np.random.choice(list(self.idx['val'].keys()))]
-                    tr_i = torch.arange(indexes['start'], indexes['end'])
-                    r = np.random.randint(0, len(tr_i)-num_segments)
-                    batch = torch.cat((batch, tr_i[r:r+num_segments]))
-                    
-            if self.config.experiment.train.semi_use_test:
-                for i in range(self.config.experiment.train.semi_k_way):
-                    indexes = self.idx['test'][np.random.choice(list(self.idx['test'].keys()))]
-                    tr_i = torch.arange(indexes['start'], indexes['end'])
-                    r = np.random.randint(0, len(tr_i)-num_segments)
-                    batch = torch.cat((batch, tr_i[r:r+num_segments]))
-            
-            
-            '''
             if self.config.experiment.train.semi_use_train:
                 tr_i = torch.arange(self.idx['train']['start'], self.idx['train']['end'])
                 for i in range(self.config.experiment.train.semi_k_way):
@@ -172,8 +151,6 @@ class SemiSupervisedSampler(data.Sampler):
                 for i in range(self.config.experiment.train.semi_k_way):
                     r = np.random.randint(0, len(test_i)-num_segments)
                     batch = torch.cat((batch, test_i[r:r+num_segments]))
-                    
-            '''
                     
             yield batch
                     

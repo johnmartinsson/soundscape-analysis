@@ -81,6 +81,10 @@ def eval_help(model, test_loader, config, writer, tag):
         df_out.to_csv(csv_path,index=False)
         util.post_processing(csv_path, 'PP_'+csv_path, tag, config)
         scores = util.evaluate('PP_'+csv_path, config.experiment.path.val_OG, tag, './')
+        #How the fuck are we getting precision and recall on the validation data?
+        #Shoudln't that be done here like the test?
+        #So we call this function with tag val from the training loop
+        #And since scores is returned at the bottom we have access to the data and it is there added to the writer.
         
     elif tag == 'TEST':
         csv_path = 'TEST_out.csv'
@@ -88,9 +92,10 @@ def eval_help(model, test_loader, config, writer, tag):
         util.post_processing(csv_path, 'PP_'+csv_path, tag, config)
         scores = util.evaluate('PP_'+csv_path, config.experiment.path.test_OG, tag, './')
         if writer is not None:
-            writer.add_scalar(tag+'_fmeasure', scores['fmeasure (percentage)'])
-            writer.add_scalar(tag+'precision', scores['precision'])
-            writer.add_scalar(tag+'recall', scores['recall'])
+            
+            writer.add_scalar('Fmeasure/test', scores['fmeasure (percentage)'])
+            writer.add_scalar('precision/test', scores['precision'])
+            writer.add_scalar('recall/test', scores['recall'])
     
     return scores
     

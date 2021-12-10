@@ -6,6 +6,7 @@ from tqdm import tqdm
 import numpy as np
 import utils
 import datasets.semisupervised as semi
+import datasets.background as background
 
 def train(model, optimizer, loss_function, train_loader, val_loader, config, writer):
     
@@ -48,6 +49,9 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
     if config.experiment.train.semi_supervised:
         semi_iterator = iter(semi.get_semi_loader(config))
         
+    if config.experiment.train.background_other_source:
+        background_iterator = iter(background.get_background_loader(config))
+        
     if config.experiment.train.specaugment:
         timeStretch = Transforms.TimeStretch(n_freq = config.experiment.features.n_mels)
         if config.experiment.train.specaugment_iid_filters:
@@ -66,10 +70,98 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
         
         print('Epoch {}'.format(epoch))
         train_iterator = iter(train_loader)
+        
+        
+        
+        
         for batch in tqdm(train_iterator):
+            
             optim.zero_grad()
             model.train()
+            
             x, y = batch
+            
+            semi_x = None
+            #Can VRAM handle this?
+            if config.experiment.train.semi_supervised:
+                
+                semi_x, _ = next(semi_iterator)
+                
+                '''
+                I am not so sure that using this energy multipler we got right now is that good of an idea!
+                '''
+                #Mix before specaugment.
+                if config.experiment.train.mix_background:
+                    
+                    if config.experiment.train.background_other_source:
+                        
+                        '''
+                        So how should this be done?
+                        (i): Draw one background sample and augment all of the data in the batch with said sample.
+                        (ii): Draw one background per labeled and unlabeled sample in the batch respectively.
+                        '''
+                        
+                        #Type (i):
+                        
+                        bgr_sample, _ = next(background_iterator)
+                        
+                        for i in range(len(x)):
+                            if config.experiment.train.background_ediff:
+                                E_x = torch.sum(x[i]**2).item()
+                                E_s = torch.sum(bgr_sample**2).item()
+                                E_diff = E_x/E_s
+                            else:
+                                E_diff = 1
+                            #TODO: Add this to config
+                            alpha = 0.1
+                            bgr_lambda = np.random.uniform(low=0, high=alpha)
+                            x[i] = (1-bgr_lambda)*x[i] + bgr_lambda*E_diff*bgr_sample
+                        
+                        if semi_x is not None:
+                            for i in range(len(semi_x)):
+                                if config.experiment.train.background_ediff:
+                                    E_x = torch.sum(semi_x[i]**2).item()
+                                    E_s = torch.sum(bgr_sample**2).item()
+                                    E_diff = E_x/E_s
+                                else:
+                                    E_diff = 1
+                                #TODO: Add this to config
+                                alpha = 0.1
+                                bgr_lambda = np.random.uniform(low=0, high=alpha)
+                                semi_x[i] = (1-bgr_lambda)*semi_x[i] + bgr_lambda*E_diff*bgr_sample
+                                
+                                
+                    else:
+                    
+                        for i in range(len(x)):
+
+                            bgr_sample = semi_x[np.random.choice(len(semi_x))]
+                            #TODO: Do this for real
+                            if config.experiment.train.background_ediff:
+                                E_x = torch.sum(x[i]**2).item()
+                                E_s = torch.sum(bgr_sample**2).item()
+                                E_diff = E_x/E_s
+                            else:
+                                E_diff = 1
+                            #TODO: Add this to config
+                            alpha = 0.1
+                            bgr_lambda = np.random.uniform(low=0, high=alpha)
+                            x[i] = (1-bgr_lambda)*x[i] + bgr_lambda*E_diff*bgr_sample
+                        
+                if config.experiment.train.specaugment:
+                    semi_x = torch.transpose(semi_x, 1, 2)
+                    time_stretch_range = config.experiment.train.time_stretch_range
+                    stretch_factor = 1 + np.random.uniform(-time_stretch_range, time_stretch_range)
+                    semi_x = timeStretch(semi_x.type(torch.complex64), stretch_factor).type(torch.float)
+                    if config.experiment.train.specaugment_iid_filters:
+                        semi_x = semi_x.reshape(semi_x.shape[0], 1, semi_x.shape[1], semi_x.shape[2])
+                    semi_x = freqMask(timeMask(semi_x))
+                    if config.experiment.train.specaugment_iid_filters:
+                        semi_x = semi_x.squeeze()
+                    semi_x = torch.transpose(semi_x, 1, 2)
+                semi_x = semi_x.to(device, dtype=torch.float)
+                semi_x = model(semi_x)
+            
             #Give more control over what from specaugment we want to use I think.
             if config.experiment.train.specaugment:
                 x = torch.transpose(x, 1, 2)
@@ -88,26 +180,7 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             
             if config.experiment.train.embedding_propagation:
                 x_out = torch.mm(global_consistency(get_similarity_matrix(x_out, 1), alpha=0.5), x_out)
-            
-            semi_x = None
-            #Can VRAM handle this?
-            if config.experiment.train.semi_supervised:
-                semi_x, _ = next(semi_iterator)
-                if config.experiment.train.specaugment:
-                    semi_x = torch.transpose(semi_x, 1, 2)
-                    time_stretch_range = config.experiment.train.time_stretch_range
-                    stretch_factor = 1 + np.random.uniform(-time_stretch_range, time_stretch_range)
-                    semi_x = timeStretch(semi_x.type(torch.complex64), stretch_factor).type(torch.float)
-                    if config.experiment.train.specaugment_iid_filters:
-                        semi_x = semi_x.reshape(semi_x.shape[0], 1, semi_x.shape[1], semi_x.shape[2])
-                    semi_x = freqMask(timeMask(semi_x))
-                    if config.experiment.train.specaugment_iid_filters:
-                        semi_x = semi_x.squeeze()
-                    semi_x = torch.transpose(semi_x, 1, 2)
-                semi_x = semi_x.to(device, dtype=torch.float)
-                semi_x = model(semi_x)
-            
-            
+                   
             tr_loss, tr_acc = loss_function(x_out, y, config.experiment.train.n_shot, config, semi_x)
             train_loss.append(tr_loss.item())
             train_acc.append(tr_acc.item())
