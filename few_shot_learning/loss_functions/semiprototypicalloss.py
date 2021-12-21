@@ -60,7 +60,17 @@ def semi_prototypical_loss(input, target, n_support, config, semi_input=None, su
     '''
     Is the below implementation correct?
     Possible TODO: add some checks and balances for which distances we still enforce loss
+    
+    TODO: Implement a weighted average here as to not dilute the signal from the labeled data 
+          when introducing more unlabeled learning samples.
     '''
+    
+    if config.experiment.train.semi_weighted:
+        labeled_weight = 2
+        unlabeled_weight = 0.5
+    else:
+        labeled_weight = 1
+        unlabeled_weight = 1
     
     for i, x in enumerate(labeled_query_samples):
         prot_ix = math.floor(i/n_query)
@@ -68,14 +78,14 @@ def semi_prototypical_loss(input, target, n_support, config, semi_input=None, su
         #print(torch.sum(F.softmax(-dists[i])))
         #print(F.softmax(-dists[i])[prot_ix])
         #print(F.softmax(-dists[i])[prot_ix].shape)
-        loss_val = torch.cat((loss_val, -F.log_softmax(-dists[i])[prot_ix].reshape(1)))
+        loss_val = torch.cat((loss_val, labeled_weight*(-F.log_softmax(-dists[i])[prot_ix].reshape(1))))
         #denom = torch.sum(torch.tensor(map(torch.exp, -dists[i])))
     
     
     for i, x in enumerate(unlabeled_query_samples):
         prot_ix = math.floor(i/n_query)+len(labeled_prototypes)
         ix = list(range(0, len(labeled_prototypes))) + [prot_ix]
-        loss_val = torch.cat((loss_val, -F.log_softmax(-dists[i+len(labeled_query_samples)][ix])[-1].reshape(1)))
+        loss_val = torch.cat((loss_val, unlabeled_weight*(-F.log_softmax(-dists[i+len(labeled_query_samples)][ix])[-1].reshape(1))))
     
     #TODO: Fix accuracy calc
     return loss_val.mean(), torch.tensor(0)

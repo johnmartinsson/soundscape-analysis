@@ -57,6 +57,7 @@ train:
   semi_train_path: ${experiment.train.semi_root_path}/hfiles/train/whole
   semi_val_path: ${experiment.train.semi_root_path}/hfiles/val
   semi_test_path: ${experiment.train.semi_root_path}/hfiles/test
+  semi_weighted: false
   
   #Gonna need more config options here
   semi_use_train: true
@@ -102,7 +103,7 @@ eval:
   use_fraction_neg: true
   use_fraction_pos: true
   script_path: ${root_path}/eval/prototypical_eval.py
-  samples_neg: -1
+  samples_neg: 650
   fraction_neg : 1
   samples_pos: -1
   fraction_pos: 1
@@ -125,4 +126,5 @@ eval:
   
   pp_median_filter : true
   mfilter_tick_rate : 12000
+  #Might be worth looking into lovering this!
   mfilter_avg_portion : 0.33

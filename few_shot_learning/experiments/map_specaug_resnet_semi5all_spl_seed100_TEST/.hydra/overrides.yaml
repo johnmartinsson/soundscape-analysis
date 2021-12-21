@@ -1,0 +1,5 @@
+- seed=100
+- root_path=/home/willbo/repos/soundscape-analysis/few_shot_learning/
+- experiment.model.script_path=/home/willbo/repos/soundscape-analysis/few_shot_learning/models/resnetproto.py
+- model=/home/willbo/repos/soundscape-analysis/few_shot_learning/outputs_old/specaug_semi5all_splloss_sig/9/best_model.pth
+- dataset=TEST

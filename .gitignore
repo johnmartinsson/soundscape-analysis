@@ -95,6 +95,7 @@ ipython_config.py
 few_shot_learning/multirun/
 few_shot_learning/outputs/
 few_shot_learning/outputs_old/
+few_shot_learning/compare
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
 __pypackages__/

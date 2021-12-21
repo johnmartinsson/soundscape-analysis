@@ -7,6 +7,7 @@ import numpy as np
 import utils
 import datasets.semisupervised as semi
 import datasets.background as background
+import csv
 
 def train(model, optimizer, loss_function, train_loader, val_loader, config, writer):
     
@@ -18,6 +19,8 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
     #Should this be done here or passed into this function?
     #Could be configs for more terminal flexibility
     optim = optimizer
+    
+    #TODO: Add config option
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optim, gamma=config.experiment.train.scheduler_gamma,
                                                   step_size=config.experiment.train.scheduler_step_size)
     num_epochs = config.experiment.train.epochs
@@ -214,6 +217,27 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             print("Saving the best model with validation fmeasure {}".format(best_val_fmeasure))
             best_state = model.state_dict()
             torch.save(best_state, best_model_path)
+            
+            #Save best validation model predictions.
+            val_file = open('VAL_out.csv', newline='')
+            pp_val_file = open('PP_VAL_out.csv', newline='')
+            best_file = open('BEST_VAL_out.csv', 'w', newline='')
+            pp_best_file = open('PP_BEST_VAL_out.csv', 'w', newline='')
+            
+            csv_reader = csv.reader(val_file, delimiter=',')
+            pp_csv_reader = csv.reader(pp_val_file, delimiter=',')
+            csv_writer = csv.writer(best_file, delimiter=',')
+            pp_csv_writer = csv.writer(pp_best_file, delimiter=',')
+            
+            for row in csv_reader:
+                csv_writer.writerow(row)
+            for row in pp_csv_reader:
+                pp_csv_writer.writerow(row)
+            
+            val_file.close()
+            pp_val_file.close()
+            best_file.close()
+            pp_best_file.close()
         
     torch.save(model.state_dict(),last_model_path)
 

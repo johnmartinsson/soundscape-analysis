@@ -1,0 +1,5 @@
+- root_path=/home/willbo/repos/soundscape-analysis/few_shot_learning
+- model=/home/willbo/repos/soundscape-analysis/few_shot_learning/outputs_old/specaug_semi5all_splloss_sig/9/best_model.pth
+- seed=100
+- experiment.model.script_path=/home/willbo/repos/soundscape-analysis/few_shot_learning/models/resnetproto.py
+- dataset=VAL

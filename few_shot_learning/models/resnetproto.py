@@ -13,6 +13,7 @@ class ResnetProto(nn.Module):
         
         #Just go with random net for now
         self.model = torchvision.models.resnet18(pretrained=False)
+
         #Make the first layer configurable?
         self.model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.model.fc = torch.nn.Identity()

@@ -222,6 +222,12 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
         q_loader = torch.utils.data.DataLoader(dataset=query_dataset, batch_sampler=None,batch_size=config.experiment.eval.query_batch_size,shuffle=False)
     
     if model is None:
+        
+        '''
+        TODO: Place print here just to make sure that model is not none during validation?
+        Don't think so though.
+        '''
+        
         #This should also listen to the config for which model we uses.
         module_model = utils.load_module(config.experiment.model.script_path)
         model = module_model.load(config)
@@ -487,11 +493,21 @@ def post_processing(evaluation_file, new_evaluation_file, tag, config):
     predictions = []
     for e in pred_reader:
         predictions.append(e)
-    
+        
+        
+    #Test a swap of order (Gave some better VAL results, bad TEST)
+    '''
+    if config.experiment.eval.pp_remove_shorts:
+        predictions = remove_short(predictions, tag, config)
+    if config.experiment.eval.pp_median_filter:
+        predictions = median_filter(predictions, tag, config)
+    '''
     if config.experiment.eval.pp_median_filter:
         predictions = median_filter(predictions, tag, config)
     if config.experiment.eval.pp_remove_shorts:
         predictions = remove_short(predictions, tag, config)
+    
+    
     
     with open(new_evaluation_file, 'w', newline='') as f:
         writer = csv.writer(f)
@@ -555,6 +571,11 @@ def median_filter(predictions, tag, config):
     new_predictions.append(predictions[0])
     
     print('Median filtering')
+    
+    '''
+    Does the code below behave differently for different array sizes?
+    If so, can this explain some of the difference that we see in the VAL/TEST results.
+    '''
     
     for key in tqdm(pred_dict.keys()):
         

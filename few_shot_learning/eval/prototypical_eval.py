@@ -77,6 +77,7 @@ def eval_help(model, test_loader, config, writer, tag):
         Perhaps we would like to make it possible to save all of the validation results and not just have them
         available for the last epoch, TODO
         '''
+
         csv_path = 'VAL_out.csv'
         df_out.to_csv(csv_path,index=False)
         util.post_processing(csv_path, 'PP_'+csv_path, tag, config)
@@ -99,64 +100,6 @@ def eval_help(model, test_loader, config, writer, tag):
     
     return scores
     
-    
-def dummy_choice(csv, n_shots):
-    events = []
-    for i in range(len(csv)):
-                if(csv.loc[i].values[-1] == 'POS' and len(events) < n_shots):
-                    events.append(csv.loc[i].values)
-    return events
-
-#Might wanna check the paths here and if we are please with the output.
-def post_processing(val_path, evaluation_file, new_evaluation_file, n_shots=5):
-    '''Post processing of a prediction file by removing all events that have shorter duration
-    than 60% of the minimum duration of the shots for that audio file.
-    
-    Parameters
-    ----------
-    val_path: path to validation set folder containing subfolders with wav audio files and csv annotations
-    evaluation_file: .csv file of predictions to be processed
-    new_evaluation_file: .csv file to be saved with predictions after post processing
-    n_shots: number of available shots
-    '''
-    
-    '''
-    I think it is of great interest to not just choose the first five positives in practice.
-    Sure this is part of the challenge. But... Interesting to invesigate. Discussion about growing
-    number of supports can fit here to?
-    '''
-    
-    csv_files = [file for file in glob(os.path.join(val_path, '*.csv'))]
-    
-    dict_duration = {}
-    for csv_file in csv_files:
-        audiofile = csv_file.replace('.csv', '.wav')
-        df = pd.read_csv(csv_file)
-        events = dummy_choice(df, n_shots)
-        min_duration = 10000 #configurable?
-        for event in events:
-            if float(event[2])-float(event[1]) < min_duration:
-                min_duration = float(event[2])-float(event[1])
-        #dict_duration[audiofile] = min_duration
-        dict_duration[os.path.split(audiofile)[1]] = min_duration
-
-    results = []
-    with open(evaluation_file, newline='') as csvfile:
-        reader = csv.reader(csvfile, delimiter=',')
-        next(reader, None)  # skip the headers
-        for row in reader:
-            results.append(row)
-
-    new_results = [['Audiofilename', 'Starttime', 'Endtime']]
-    for event in results:
-        audiofile = os.path.split(event[0])[1]
-        min_dur = dict_duration[audiofile]
-        if float(event[2])-float(event[1]) >= 0.6*min_dur:
-            new_results.append([os.path.split(event[0])[1], event[1], event[2]])
-
-    with open(new_evaluation_file, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerows(new_results)
 
 
 def load():
