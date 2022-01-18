@@ -124,6 +124,8 @@ class SpectralFeatureExtractor(FeatureExtractor):
             df_pos = df[(df == 'POS').any(axis=1)]
             
             start_time, end_time = util.time_2_frame(df_pos, fps)
+            
+            
             label_f = list(chain.from_iterable(
                 [df_pos.columns[(df_pos == 'POS').loc[index]].values for index, _ in df_pos.iterrows()]))
             

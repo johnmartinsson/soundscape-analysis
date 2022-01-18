@@ -6,6 +6,7 @@ from tqdm import tqdm
 import numpy as np
 import utils
 import datasets.semisupervised as semi
+import datasets.semisupervised_lazy as semi_lazy
 import datasets.background as background
 import csv
 
@@ -50,7 +51,10 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
         train_loader.batch_sampler.set_writer(writer)
     
     if config.experiment.train.semi_supervised:
-        semi_iterator = iter(semi.get_semi_loader(config))
+        if config.experiment.train.semi_lazy:
+            semi_iterator = iter(semi_lazy.get_semi_loader(config))
+        else:
+            semi_iterator = iter(semi.get_semi_loader(config))
         
     if config.experiment.train.background_other_source:
         background_iterator = iter(background.get_background_loader(config))

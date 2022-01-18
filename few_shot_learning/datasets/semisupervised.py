@@ -13,6 +13,12 @@ We also need some dataset. Probably possible to keep all in RAM for now.
 Note: It is currently insanely RAM hungry :)
 '''
 
+'''
+TODO: 13-01-22: Process gets killed when trying out segment lengths longer than 0.2s.
+                Need to reduce memory footprint of the semi loaders, lazy loading essentially.
+                Problem will be even more apparent when incerasing the number of mel bins.
+'''
+
 def get_semi_loader(config):
     
     print('Creating semi supervised loader')

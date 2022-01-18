@@ -53,6 +53,7 @@ train:
   epochs: 15
   
   semi_supervised: false
+  semi_lazy: true
   semi_root_path: ${experiment.path.features}
   semi_train_path: ${experiment.train.semi_root_path}/hfiles/train/whole
   semi_val_path: ${experiment.train.semi_root_path}/hfiles/val

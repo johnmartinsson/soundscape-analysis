@@ -1,0 +1,8 @@
+experiment:
+    path:
+        train_features: /home/willbo/data/dcase_0.3seglen/hfiles/train
+    datagen:
+        raw: false
+        ltoi: true
+        balance: true
+        normalize: true
