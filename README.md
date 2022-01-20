@@ -6,8 +6,10 @@ Feel free to update the README with other useful sources along the way!
 I Just added some generic training code I have used before in run.py and utils.py, it is incomplete, and not necessarily the way to go.
 
 ## Datasets
-- [Scaper](https://github.com/justinsalamon/scaper)
 - [SoundData](https://github.com/soundata/soundata)
+
+## Data Augmentation
+- [Scaper](https://github.com/justinsalamon/scaper)
 
 ## Useful Python libraries
 - [librosa](https://librosa.org/doc/latest/index.html)
