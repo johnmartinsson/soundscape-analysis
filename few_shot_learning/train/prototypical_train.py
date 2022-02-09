@@ -7,10 +7,11 @@ import numpy as np
 import utils
 import datasets.semisupervised as semi
 import datasets.semisupervised_lazy as semi_lazy
+import datasets.semisupervised_trainvalcv as semi_trainvalcv
 import datasets.background as background
 import csv
 
-def train(model, optimizer, loss_function, train_loader, val_loader, config, writer):
+def train(model, optimizer, loss_function, train_loader, val_loader, config, writer, fold=None, class_map=None, class_dict=None, tr_cls_keys=None, val_cls_keys=None):
     
     if config.experiment.set.device == 'cuda':
         device = torch.device('cuda')
@@ -36,7 +37,12 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
     model.to(device)
     
     eval_module = utils.load_module(config.experiment.eval.script_path)
-    val_function = eval_module.load_help()
+    
+    if config.experiment.set.trainvalcv:
+        val_function = eval_module.load_help_TrainValCV()
+    else:
+        val_function = eval_module.load_help()
+    
     val_precision = []
     val_recall = []
     val_fmeasure = []
@@ -51,10 +57,13 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
         train_loader.batch_sampler.set_writer(writer)
     
     if config.experiment.train.semi_supervised:
-        if config.experiment.train.semi_lazy:
-            semi_iterator = iter(semi_lazy.get_semi_loader(config))
+        if config.experiment.set.trainvalcv:
+            semi_iterator = iter(semi_trainvalcv.get_semi_loader_TrainValCV(config, class_map, class_dict, tr_cls_keys, val_cls_keys))
         else:
-            semi_iterator = iter(semi.get_semi_loader(config))
+            if config.experiment.train.semi_lazy:
+                semi_iterator = iter(semi_lazy.get_semi_loader(config))
+            else:
+                semi_iterator = iter(semi.get_semi_loader(config))
         
     if config.experiment.train.background_other_source:
         background_iterator = iter(background.get_background_loader(config))
@@ -69,6 +78,8 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             freqMask = Transforms.FrequencyMasking(config.experiment.train.freq_mask_range)
     
     #
+    
+    #Mark TrainValCV
     
     for epoch in range(num_epochs):
         
@@ -89,8 +100,20 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             x, y = batch
             
             semi_x = None
-            #Can VRAM handle this?
-            if config.experiment.train.semi_supervised:
+            
+            #Could potentially do more stuff here.
+            #Can we do some bandit idea, exploration explotation kinda wibe. Perhaps reversed?
+            #If we no longer get a lot of signals from the training data, how bout excluding that and just start doing unlabeled updates?
+            #Can still choose unlabeled based on labeled.
+            
+            semi_delay_flag = False
+            if epoch < config.experiment.train.semi_delay:
+                semi_delay_flag = True
+            else:
+                semi_delay_flag = False
+            
+
+            if config.experiment.train.semi_supervised and not semi_delay_flag:
                 
                 semi_x, _ = next(semi_iterator)
                 
@@ -103,6 +126,10 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
                     if config.experiment.train.background_other_source:
                         
                         '''
+                        
+                        TODO: Revisit this part. Perhaps include augmentation for support sets during training?
+                        
+                       
                         So how should this be done?
                         (i): Draw one background sample and augment all of the data in the batch with said sample.
                         (ii): Draw one background per labeled and unlabeled sample in the batch respectively.
@@ -154,7 +181,22 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
                             alpha = 0.1
                             bgr_lambda = np.random.uniform(low=0, high=alpha)
                             x[i] = (1-bgr_lambda)*x[i] + bgr_lambda*E_diff*bgr_sample
-                        
+                
+                
+                '''
+                TODO: Implement idea here about mixing on the few-shot samples on unlabeled samples.
+                      (i): We will require some loader to get the samples for this I think.
+                            (-): Should be able to sample from val, test, or both by config.
+                      (ii): We should be able to include the unlabeled prototypes and queris augmented this way into the whole loss if we so desire
+                            (-): How can we do this easily, just 'white wash' the u/p u/q pair (simply make it look like normal training data).
+                                 I think we can earmark the pair/s we augment and just concat them to x and remove them from semi_x and we good.
+                                 However, look at the order of samples in x and match that (if it even matters considering the loss).
+                      (iii): We should be able to influence the parameters of a distribution from which we sample to determine how many of the u/p and u/q pairs we augment this way.
+                '''
+                
+                if config.experiment.train.semi_augment:
+                    pass
+                
                 if config.experiment.train.specaugment:
                     semi_x = torch.transpose(semi_x, 1, 2)
                     time_stretch_range = config.experiment.train.time_stretch_range
@@ -212,7 +254,12 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
         
         #No dropouts in model for now, I think there is no difference between train and eval mode
         model.eval()
-        scores = val_function(model, None, config, None, 'VAL')
+        
+        if config.experiment.set.trainvalcv:
+            scores = val_function(model, None, config, None, class_map, class_dict, tr_cls_keys, val_cls_keys, fold, 'VAL')
+        else:
+            scores = val_function(model, None, config, None, 'VAL')
+        
         writer.add_scalar('Fmeasure/val', scores['fmeasure (percentage)'], epoch)
         writer.add_scalar('precision/val', scores['precision'], epoch)
         writer.add_scalar('recall/val', scores['recall'], epoch)
@@ -222,11 +269,18 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             best_state = model.state_dict()
             torch.save(best_state, best_model_path)
             
+            #TODO: Work with new fold file names here!!!!!!!
             #Save best validation model predictions.
-            val_file = open('VAL_out.csv', newline='')
-            pp_val_file = open('PP_VAL_out.csv', newline='')
-            best_file = open('BEST_VAL_out.csv', 'w', newline='')
-            pp_best_file = open('PP_BEST_VAL_out.csv', 'w', newline='')
+            if config.experiment.set.trainvalcv:
+                val_file = open('VAL_out_fold_'+str(fold)+'.csv', newline='')
+                pp_val_file = open('PP_VAL_out_fold_'+str(fold)+'.csv', newline='')
+                best_file = open('BEST_VAL_out_fold_'+str(fold)+'.csv', 'w', newline='')
+                pp_best_file = open('PP_BEST_VAL_out_fold_'+str(fold)+'.csv', 'w', newline='')
+            else:
+                val_file = open('VAL_out.csv', newline='')
+                pp_val_file = open('PP_VAL_out.csv', newline='')
+                best_file = open('BEST_VAL_out.csv', 'w', newline='')
+                pp_best_file = open('PP_BEST_VAL_out.csv', 'w', newline='')
             
             csv_reader = csv.reader(val_file, delimiter=',')
             pp_csv_reader = csv.reader(pp_val_file, delimiter=',')

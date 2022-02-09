@@ -3,6 +3,7 @@ set:
   train: true
   eval: true
   device: cuda
+  trainvalcv: false
 
 path:
   features: /home/willbo/data/dcase/features
@@ -14,6 +15,7 @@ path:
   data_test: /home/willbo/data/dcase/test
   best_model: best_model.pth
   last_model: last_model.pth
+  trainvalcv_features: /home/willbo/data/dcase_trainvalcv
   
   val_OG: /home/willbo/data/dcase/Validation_Set
   test_OG: /home/willbo/data/dcase/Test_Set
@@ -59,6 +61,7 @@ train:
   semi_val_path: ${experiment.train.semi_root_path}/hfiles/val
   semi_test_path: ${experiment.train.semi_root_path}/hfiles/test
   semi_weighted: false
+  semi_delay: 0
   
   #Gonna need more config options here
   semi_use_train: true
@@ -84,6 +87,8 @@ train:
   background_path : ???
   background_ediff : true
   
+  folds : 5
+  
   #Should we also have some background mixing here?
   #I saw some other interesting augmentation techniques beyond specaugment in some paper
   
@@ -101,6 +106,7 @@ features:
   hop_mel: 256
 
 eval:
+  base_eval: false
   use_fraction_neg: true
   use_fraction_pos: true
   script_path: ${root_path}/eval/prototypical_eval.py
@@ -113,6 +119,8 @@ eval:
   negative_set_batch_size: 200
   positive_set_batch_size: 20
   p_thresh: 0.5
+  
+  new_prob: true
   
   #Clustering
   clustering: false

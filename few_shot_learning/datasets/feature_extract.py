@@ -154,16 +154,33 @@ class SpectralFeatureExtractor(FeatureExtractor):
                 #Event shorter than a segment!
                 else:
                     
-                    #Repeat the patch til segment length.
-                    pcen_patch = pcen[str_ind:end_ind]
-                    if pcen_patch.shape[0] == 0:
-                        continue
-                    
-                    repeats = int(seg_len/(pcen_patch.shape[0])) + 1
-                    pcen_patch_new = np.tile(pcen_patch, (repeats, 1))
-                    pcen_patch_new = pcen_patch_new[0:int(seg_len)]
-                    events += [pcen_patch_new]
-                    labels.append(label)
+                    #TODO: Introduce alternative to tiling.
+                    if self.config.features.tile_train:
+                        #Repeat the patch til segment length.
+                        pcen_patch = pcen[str_ind:end_ind]
+                        if pcen_patch.shape[0] == 0:
+                            continue
+
+                        repeats = int(seg_len/(pcen_patch.shape[0])) + 1
+                        pcen_patch_new = np.tile(pcen_patch, (repeats, 1))
+                        pcen_patch_new = pcen_patch_new[0:int(seg_len)]
+                        events += [pcen_patch_new]
+                        labels.append(label)
+                    else:
+                        
+                        #extend segment from annotations until seg_len is reached.
+                        #TODO: Fix potential out of bounds problems 
+                        i = 0
+                        while (end_ind + i) - (str_ind - i) < seg_len:
+                            i+=1
+                        pcen_patch = pcen[(str_ind - i):(end_ind + i)]
+                        pcen_patch = pcen_patch[0:int(seg_len)]
+                        if pcen_patch.shape[0] == 0:
+                            print(pcen_patch.shape[0])
+                            print("The patch is of 0 length (training)")
+                            continue
+                        events += [pcen_patch]
+                        labels.append(label)
                     
         print('Writing to file')
         
@@ -296,20 +313,34 @@ class SpectralFeatureExtractor(FeatureExtractor):
                     idx_pos += 1
 
                 else:
-                    patch_pos = pcen[str_ind:end_ind]
+                    
+                    #TODO: Introduce alternative to tiling.
+                    if (self.config.features.tile_val and tag == 'VAL') or (self.config.features.tile_test and tag == 'TEST'):
+                        
+                        patch_pos = pcen[str_ind:end_ind]
+                        if patch_pos.shape[0] == 0:
+                            print(patch_pos.shape[0])
+                            print("The patch is of 0 length")
+                            continue
+                        repeat_num = int(seg_len / (patch_pos.shape[0])) + 1
 
-                    if patch_pos.shape[0] == 0:
-                        print(patch_pos.shape[0])
-                        print("The patch is of 0 length")
-                        continue
-                    repeat_num = int(seg_len / (patch_pos.shape[0])) + 1
-
-                    patch_new = np.tile(patch_pos, (repeat_num, 1))
-                    patch_new = patch_new[0:int(seg_len)]
-                    hf['feat_pos'].resize((idx_pos + 1, patch_new.shape[0], patch_new.shape[1]))
-                    hf['feat_pos'][idx_pos] = patch_new
-                    idx_pos += 1
-
+                        patch_new = np.tile(patch_pos, (repeat_num, 1))
+                        patch_new = patch_new[0:int(seg_len)]
+                        hf['feat_pos'].resize((idx_pos + 1, patch_new.shape[0], patch_new.shape[1]))
+                        hf['feat_pos'][idx_pos] = patch_new
+                        idx_pos += 1
+                        
+                    else:
+                        
+                        i = 0
+                        while (end_ind + i) - (str_ind - i) < seg_len:
+                            i+=1
+                        pcen_patch = pcen[(str_ind - i):(end_ind + i)]
+                        pcen_patch = pcen_patch[0:int(seg_len)]
+                        
+                        hf['feat_pos'].resize((idx_pos + 1, pcen_patch.shape[0], pcen_patch.shape[1]))
+                        hf['feat_pos'][idx_pos] = pcen_patch
+                        idx_pos += 1
 
 
             print("Creating query dataset")
@@ -330,11 +361,51 @@ class SpectralFeatureExtractor(FeatureExtractor):
 
             hf.close()
 
+
+#Class for feature extraction supposed for the TrainValCV procedure
+class TrainValCVExtractor():
     
+    def __init__(self, config):
+        self.config = config
+        self.spectralizer = Spectralizer(config)
+    
+    def extract_features():
+        pass
 
 
+#Dont know where else to put this right now.
+#This class could for sure be of use in many SED tasks
+class Spectralizer():
+    
+    def __init__(self, config):
+        self.config = config
+        
+        self.sr = config.features.sr
+        self.n_fft = config.features.n_fft
+        self.hop = config.features.hop_mel
+        self.n_mels = config.features.n_mels
+        self.fmax = config.features.fmax
+        
 
+    def raw_to_spec(self, audio, config):
 
+        #Supposedly suggested by librosa.
+        audio = audio * (2**32)
+
+        mel_spec = librosa.feature.melspectrogram(audio, sr=self.sr, n_fft=self.n_fft, hop_length=self.hop,
+                                                 n_mels=self.n_mels, fmax=self.fmax)
+
+        pcen = librosa.core.pcen(mel_spec, sr=self.sr)
+        pcen = pcen.astype(np.float32)
+        
+        #Note that we transform the features here and therefor have time/frame along dim 0.
+        #Transform back when loading data? Smaksak
+        return pcen.T
+    
+    
+    
+    
+    
 class RawFeatureExtractor(FeatureExtractor):
 
     def __init__(self, config):
@@ -398,32 +469,3 @@ class RawFeatureExtractor(FeatureExtractor):
     #TODO
     def extract_test(self):
         pass
-
-#Dont know where else to put this right now.
-#This class could for sure be of use in many SED tasks
-class Spectralizer():
-    
-    def __init__(self, config):
-        self.config = config
-        
-        self.sr = config.features.sr
-        self.n_fft = config.features.n_fft
-        self.hop = config.features.hop_mel
-        self.n_mels = config.features.n_mels
-        self.fmax = config.features.fmax
-        
-
-    def raw_to_spec(self, audio, config):
-
-        #Supposedly suggested by librosa.
-        audio = audio * (2**32)
-
-        mel_spec = librosa.feature.melspectrogram(audio, sr=self.sr, n_fft=self.n_fft, hop_length=self.hop,
-                                                 n_mels=self.n_mels, fmax=self.fmax)
-
-        pcen = librosa.core.pcen(mel_spec, sr=self.sr)
-        pcen = pcen.astype(np.float32)
-        
-        #Note that we transform the features here and therefor have time/frame along dim 0.
-        #Transform back when loading data? Smaksak
-        return pcen.T

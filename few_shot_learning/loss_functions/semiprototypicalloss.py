@@ -47,6 +47,8 @@ def semi_prototypical_loss(input, target, n_support, config, semi_input=None, su
         
         all_prototypes = torch.cat((labeled_prototypes, semi_prototypes))
         n_all_classes += n_semi_classes
+    else:
+        unlabeled_query_samples = []
     
 
     

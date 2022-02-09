@@ -47,6 +47,17 @@ def time_2_frame(df,fps):
 
     return start_time,end_time
 
+def time_2_frame(start_time, end_time, fps):
+    
+    start_time = start_time - 0.025
+    end_time = end_time + 0.025
+    
+    start_time = [int(np.floor(start * fps)) for start in start_time]
+    end_time = [int(np.floor(end * fps)) for end in end_time]
+    
+    return start_time, end_time
+    
+
 def class_to_int(labels):
     
     class_set = set(labels)
@@ -184,8 +195,8 @@ def get_probability_negdistance(pos_proto,neg_proto,query_set_out):
 
 
 #Quite possible that this should actually be somewhere else.
-
-def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=None, model=None):
+#class_name for TrainValCV, if not none do something a lil different. For example gen_eval = TestDatagenTrainValCv(config, hdf, class_name)
+def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=None, model=None, class_map=None, class_dict=None, class_name=None, tr_cls_keys=None):
 
     """ Run the evaluation
     Args:
@@ -199,8 +210,12 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
      - offset: Offset array predicted by the model
       """
     hop_seg = int(config.experiment.features.hop_seg * config.experiment.features.sr // config.experiment.features.hop_mel)
-
-    gen_eval = dg.TestDatagen(hdf_eval,config)
+    
+    if class_name is None:
+        gen_eval = dg.TestDatagen(hdf_eval,config)
+    else:
+        gen_eval = dg.FSDatagenTrainValCV(config, class_map, class_dict, tr_cls_keys, hdf_eval, class_name)
+    
     X_pos, X_neg,X_query = gen_eval.generate_eval()
 
     X_pos = torch.tensor(X_pos)
@@ -364,7 +379,10 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
                     else:
                         tmp = model(x_q[i])
                     embedded = torch.cat((embedded, tmp.mean(dim=0).reshape(1,-1)), dim=0)
-                probability_pos = get_probability_negdistance(pos_proto, neg_proto, embedded)
+                if config.experiment.eval.new_prob:
+                    probability_pos = get_probability_negdistance(pos_proto, neg_proto, embedded)
+                else:
+                    probability_pos = get_probability(pos_proto, neg_proto, embedded)
                 prob_pos_iter.extend(probability_pos)    
         else:
             
@@ -400,7 +418,7 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
 
     onset_frames = np.where(changes == 1)[0]
     offset_frames = np.where(changes == -1)[0]
-
+    
     str_time_query = strt_index_query * config.experiment.features.hop_mel / config.experiment.features.sr
 
     onset = (onset_frames + 1) * (hop_seg) * config.experiment.features.hop_mel / config.experiment.features.sr
@@ -468,8 +486,30 @@ def get_dataloaders_train(config):
 def get_dataloaders_test(config):    
     return None
 
+#Same format as previously.
+def get_dataloaders_TrainValCV(config, class_map, class_dict, tr_cls_keys):
     
+    datagen = dg.DatagenTrainValCV(config, class_map, class_dict, tr_cls_keys)
+    X_train, Y_train = datagen.generate_train()
     
+    X_tr = torch.tensor(X_train)
+    Y_tr = torch.LongTensor(Y_train)
+    
+    samples_per_cls = config.experiment.train.n_shot + config.experiment.train.n_query
+    batch_size_tr = samples_per_cls * config.experiment.train.k_way
+    num_batches_tr = len(Y_train)//batch_size_tr
+    
+    train_set = torch.utils.data.TensorDataset(X_tr, Y_tr)
+    
+    tr_sampler = re.RandomEpisodicSampler(Y_train, num_batches_tr, config.experiment.train.k_way,
+        config.experiment.train.n_shot, config.experiment.train.n_query)
+    
+    train_loader = torch.utils.data.DataLoader(dataset=train_set, batch_sampler=tr_sampler, num_workers=0,
+        pin_memory=True, shuffle=False)
+    
+    return train_loader, None
+
+
 ########################################################################################
 ########################################################################################
 ########################## EVAL/METRIC PIPE HERE, SHITLOAD OF CODE #####################
@@ -486,7 +526,7 @@ def dummy_choice(csv, n_shots):
                     events.append(csv.loc[i].values)
     return events
 
-def post_processing(evaluation_file, new_evaluation_file, tag, config):
+def post_processing(evaluation_file, new_evaluation_file, tag, config, fold=None):
     
     pred_file = open(evaluation_file, newline='')
     pred_reader = csv.reader(pred_file, delimiter=',')
@@ -503,9 +543,9 @@ def post_processing(evaluation_file, new_evaluation_file, tag, config):
         predictions = median_filter(predictions, tag, config)
     '''
     if config.experiment.eval.pp_median_filter:
-        predictions = median_filter(predictions, tag, config)
+        predictions = median_filter(predictions, tag, config, fold)
     if config.experiment.eval.pp_remove_shorts:
-        predictions = remove_short(predictions, tag, config)
+        predictions = remove_short(predictions, tag, config, fold)
     
     
     
@@ -514,7 +554,7 @@ def post_processing(evaluation_file, new_evaluation_file, tag, config):
         writer.writerows(predictions)
 
 #Remove short duration events post processing
-def remove_short(predictions, tag, config):
+def remove_short(predictions, tag, config, fold=None):
     
     '''
     Post processing of a prediction file by removing all events that have shorter duration
@@ -524,7 +564,10 @@ def remove_short(predictions, tag, config):
     print('Removing short duration events')
     
     if tag == 'VAL':
-        csv_files = [file for file in glob(os.path.join(config.experiment.path.data_val, '*.csv'))]
+        if config.experiment.set.trainvalcv:
+            csv_files = [file for file in glob(os.path.join('VAL_folds/fold_'+str(fold)+'/fold', '*.csv'))]
+        else:
+            csv_files = [file for file in glob(os.path.join(config.experiment.path.data_val, '*.csv'))]
     elif tag == 'TEST':
         csv_files = [file for file in glob(os.path.join(config.experiment.path.data_test, '*.csv'))]
         
@@ -550,7 +593,7 @@ def remove_short(predictions, tag, config):
     return new_predictions
 
 #Median filtering of predicted events.
-def median_filter(predictions, tag, config):
+def median_filter(predictions, tag, config, fold=None):
     
     num_proc = 16
     pool = Pool(processes=num_proc)
@@ -593,10 +636,14 @@ def median_filter(predictions, tag, config):
         #How should we think around this window size?
         #Can we base it per file?
         if tag == 'VAL':
-            csv_files = [file for file in glob(os.path.join(config.experiment.path.data_val, '*.csv'))]
+            if config.experiment.set.trainvalcv:
+                csv_files = [file for file in glob(os.path.join('VAL_folds/fold_'+str(fold)+'/fold', '*.csv'))]
+            else:
+                csv_files = [file for file in glob(os.path.join(config.experiment.path.data_val, '*.csv'))]
         elif tag == 'TEST':
             csv_files = [file for file in glob(os.path.join(config.experiment.path.data_test, '*.csv'))]
-            
+        
+        
         dict_duration = {}
         for csv_file in csv_files:
             audiofile = csv_file.replace('.csv', '.wav')

@@ -51,6 +51,9 @@ features:
   n_fft: 1024
   n_mels: 128
   hop_mel: 256
+  tile_train: false
+  tile_val: false
+  tile_test: false
   
 train:
     n_shot: 5
