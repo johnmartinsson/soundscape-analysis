@@ -139,9 +139,9 @@ def eval_help_TrainValCV(model, test_loader, config, writer, class_map, class_di
                 #We pase the solution done in datagen here and see how that works. This might be wrong to we should really calculate this correctly!!!!
                 
                 if config.experiment.eval.base_eval:
-                    onset, offset = eval_base.evaluate_prototypes(config, h_file, device, strt_index_query, model, class_map, class_dict, tr_cls_keys, inner)
+                    onset, offset = eval_base.evaluate_prototypes(config, h_file, device, strt_index_query, model, class_map, class_dict, inner, tr_cls_keys)
                 else:
-                    onset,offset = util.evaluate_prototypes(config, h_file, device, strt_index_query, model)
+                    onset,offset = util.evaluate_prototypes(config, h_file, device, strt_index_query, model, class_map, class_dict, inner, tr_cls_keys)
 
                 #Might need to add +'.wav' to inner here to conform to existing code
                 name = np.repeat(inner+'.wav', len(onset))

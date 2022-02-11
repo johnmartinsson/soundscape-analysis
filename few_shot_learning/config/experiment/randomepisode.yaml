@@ -62,6 +62,7 @@ train:
   semi_test_path: ${experiment.train.semi_root_path}/hfiles/test
   semi_weighted: false
   semi_delay: 0
+  semi_augment: false
   
   #Gonna need more config options here
   semi_use_train: true

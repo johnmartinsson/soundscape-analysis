@@ -8,6 +8,29 @@ import torch
 import torch.utils.data
 from tqdm import tqdm
 
+def get_probability(x_pos,neg_proto,query_set_out):
+
+
+    """Calculates the  probability of each query point belonging to either the positive or negative class
+     Args:
+     - x_pos : Model output for the positive class
+     - neg_proto : Negative class prototype calculated from randomly chosed 100 segments across the audio file
+     - query_set_out:  Model output for the first 8 samples of the query set
+     Out:
+     - Probabiility array for the positive class
+     """
+
+    pos_prototype = x_pos.mean(0)
+    prototypes = torch.stack([pos_prototype,neg_proto])
+    dists = util.euclidean_dist(query_set_out,prototypes)
+    '''  Taking inverse distance for converting distance to probabilities'''
+    inverse_dist = torch.div(1.0, dists)
+    prob = torch.softmax(inverse_dist,dim=1)
+    '''  Probability array for positive class'''
+    prob_pos = prob[:,0]
+
+    return prob_pos.detach().cpu().tolist()
+
 def evaluate_prototypes(conf=None,hdf_eval=None,device= None,strt_index_query=None, model=None, class_map=None, class_dict=None, tr_keys=None, class_name=None):
 
     """ Run the evaluation
@@ -51,13 +74,13 @@ def evaluate_prototypes(conf=None,hdf_eval=None,device= None,strt_index_query=No
         '''
         
         #This should also listen to the config for which model we uses.
-        module_model = utils.load_module(config.experiment.model.script_path)
-        model = module_model.load(config)
+        module_model = utils.load_module(conf.experiment.model.script_path)
+        model = module_model.load(conf)
 
         if device == 'cpu':
-            model.load_state_dict(torch.load(config.experiment.path.best_model, map_location=torch.device('cpu')))
+            model.load_state_dict(torch.load(conf.experiment.path.best_model, map_location=torch.device('cpu')))
         else:
-            model.load_state_dict(torch.load(config.experiment.path.best_model))
+            model.load_state_dict(torch.load(conf.experiment.path.best_model))
             
         if device == 'cpu':
             model.load_state_dict(torch.load(conf.experiment.path.best_model, map_location=torch.device('cpu')))
@@ -108,7 +131,7 @@ def evaluate_prototypes(conf=None,hdf_eval=None,device= None,strt_index_query=No
             x_pos = x_pos.to(device)
             x_pos = model(x_pos)
             x_query = model(x_q)
-            probability_pos = util.get_probability(x_pos, neg_proto, x_query)
+            probability_pos = get_probability(x_pos, neg_proto, x_query)
             prob_pos_iter.extend(probability_pos)
 
         prob_comb.append(prob_pos_iter)
