@@ -10,6 +10,7 @@ I Just added some generic training code I have used before in run.py and utils.p
 
 ## Data Augmentation
 - [Scaper](https://github.com/justinsalamon/scaper)
+- [audiomentations](https://github.com/iver56/audiomentations)
 
 ## Useful Python libraries
 - [librosa](https://librosa.org/doc/latest/index.html)
