@@ -4,6 +4,7 @@ set:
   eval: true
   device: cuda
   trainvalcv: false
+  mem_fraction: 1.0
 
 path:
   features: /home/willbo/data/dcase/features
@@ -41,9 +42,18 @@ datagen:
   stratify: true
 
 train:
+  
+  rotate: false
+    
+  save_init_state: false
+  save_first_batch_state: false
+  
   script_path: ${root_path}/train/prototypical_train.py
-  artifacts_path: ${root_path}/datasets/artifacts 
+  artifacts_path: ${root_path}/datasets/artifacts
+  
   sampler: random
+  query_candidates: 50
+  
   num_classes: 15
   n_shot: 5
   n_query: 5
@@ -54,6 +64,8 @@ train:
   scheduler_step_size: 10
   epochs: 15
   
+  s_temp: 1
+  
   semi_supervised: false
   semi_lazy: true
   semi_root_path: ${experiment.path.features}
@@ -62,7 +74,11 @@ train:
   semi_test_path: ${experiment.train.semi_root_path}/hfiles/test
   semi_weighted: false
   semi_delay: 0
+  
   semi_augment: false
+  semi_augment_fl: false
+  semi_augment_rw: true
+  semi_augment_ediff: true
   
   #Gonna need more config options here
   semi_use_train: true
@@ -76,6 +92,8 @@ train:
   
   #Specaugment parameters
   specaugment: false
+  specaugment_prototypes: false
+  specaugment_timestretch: true
   specaugment_iid_filters: true
   time_stretch_range: 0.1
   time_mask_range: 5
@@ -88,7 +106,19 @@ train:
   background_path : ???
   background_ediff : true
   
+  log_chain: false
+  log_p_samples: 20
+  log_q_samples: 50
+  log_path: chain_log.pkl
+  
+  
+  multi : false
+  
+  print: false
+  
   folds : 5
+  
+  eval_test: false
   
   #Should we also have some background mixing here?
   #I saw some other interesting augmentation techniques beyond specaugment in some paper
@@ -138,3 +168,5 @@ eval:
   mfilter_tick_rate : 12000
   #Might be worth looking into lovering this!
   mfilter_avg_portion : 0.33
+  
+  mask: false

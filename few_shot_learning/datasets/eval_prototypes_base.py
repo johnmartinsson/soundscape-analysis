@@ -31,7 +31,7 @@ def get_probability(x_pos,neg_proto,query_set_out):
 
     return prob_pos.detach().cpu().tolist()
 
-def evaluate_prototypes(conf=None,hdf_eval=None,device= None,strt_index_query=None, model=None, class_map=None, class_dict=None, tr_keys=None, class_name=None):
+def evaluate_prototypes(conf=None,hdf_eval=None,device= None,strt_index_query=None, model=None, class_map=None, class_dict=None, class_name=None, tr_keys=None):
 
     """ Run the evaluation
     Args:

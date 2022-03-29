@@ -47,7 +47,7 @@ def time_2_frame(df,fps):
 
     return start_time,end_time
 
-def time_2_frame(start_time, end_time, fps):
+def time_2_frame_(start_time, end_time, fps):
     
     start_time = start_time - 0.025
     end_time = end_time + 0.025
@@ -60,11 +60,16 @@ def time_2_frame(start_time, end_time, fps):
 
 def class_to_int(labels):
     
-    class_set = set(labels)
-    ltoix = {label:index for index, label in enumerate(class_set)}
+    #This is the hidden culprit
+    #class_set = set(labels)
+    tmp = list(set(labels))
+    tmp.sort()
+    
+    ltoix = {label:index for index, label in enumerate(tmp)}
+
     return np.array([ltoix[label] for label in labels])
 
-def balance_class_distribution(X,Y):
+def balance_class_distribution(X,Y, config):
 
     '''  Class balancing through Random oversampling
     Args:
@@ -80,7 +85,9 @@ def balance_class_distribution(X,Y):
     set_y = set(Y)
 
 
-    ros = RandomOverSampler(random_state=42)
+    #ros = RandomOverSampler(random_state=config.seed)
+    #Setting this to none makes use of the same instance as np.random
+    ros = RandomOverSampler(random_state=None)
     x_unifm, y_unifm = ros.fit_resample(x_index, Y)
     unifm_index = [index_new[0] for index_new in x_unifm]
 
@@ -224,6 +231,20 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
     Y_neg = torch.LongTensor(np.zeros(X_neg.shape[0]))
     X_query = torch.tensor(X_query)
     Y_query = torch.LongTensor(np.zeros(X_query.shape[0]))
+    
+    if config.experiment.eval.mask:
+        
+        mask = np.zeros((X_pos.shape[1], X_pos.shape[2]))
+        mask[:,110:128] = 1
+        mask_c = np.ones((X_pos.shape[1], X_pos.shape[2]))
+        mask_c[:,110:128] = 0
+        for i in range(len(X_pos)):
+            X_pos[i] = X_pos[i] * mask_c
+        for i in range(len(X_neg)):
+            X_neg[i] = X_neg[i] * mask_c
+        for i in range(len(X_query)):
+            X_query[i] = X_query[i] * mask_c
+            
 
     num_batch_query = len(Y_query) // config.experiment.eval.query_batch_size
     
@@ -317,7 +338,7 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
             x_neg, y_neg = batch
             x_neg = x_neg.to(device)
             #True baind-aid fix right here:
-            if config.type.classifier:
+            if config.experiment.train.multi:
                 feat_neg, _ = model(x_neg)
             else:
                 feat_neg = model(x_neg)
@@ -350,7 +371,7 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
         for batch in tqdm(pos_iterator):
             x_pos, y_pos = batch
             x_pos = x_pos.to(device)
-            if config.type.classifier:
+            if config.experiment.train.multi:
                 feat_pos, _ = model(x_pos)
             else:
                 feat_pos = model(x_pos)
@@ -374,7 +395,7 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
                 embedded = torch.zeros(0,x_q.shape[1])
                 embedded = embedded.to(device)
                 for i in range(len(x_q)):
-                    if config.type.classifier:
+                    if config.experiment.train.multi:
                         tmp, _ = model(x_q[i])
                     else:
                         tmp = model(x_q[i])
@@ -389,7 +410,7 @@ def evaluate_prototypes(config=None,hdf_eval=None,device= None,strt_index_query=
             for batch in tqdm(q_iterator):
                 x_q, y_q = batch
                 x_q = x_q.to(device)
-                if config.type.classifier:
+                if config.experiment.train.multi:
                     x_query, _ = model(x_q)
                 else:
                     x_query = model(x_q)
@@ -462,7 +483,7 @@ def get_dataloaders_train(config):
     
     if config.experiment.train.sampler == 'random':
         tr_sampler = re.RandomEpisodicSampler(Y_train, num_batches_tr, config.experiment.train.k_way,
-        config.experiment.train.n_shot, config.experiment.train.n_query)
+        config.experiment.train.n_shot, config.experiment.train.n_query, config)
         #val_sampler = re.RandomEpisodicSampler(Y_val, num_batches_vd, config.experiment.train.k_way,
         #config.experiment.train.n_shot, config.experiment.train.n_query)
 
@@ -473,7 +494,7 @@ def get_dataloaders_train(config):
         #val_sampler = re.RandomEpisodicSampler(Y_val, num_batches_tr, config.experiment.train.k_way,
         #config.experiment.train.n_shot, config.experiment.train.n_query)
 
-    train_loader = torch.utils.data.DataLoader(dataset=train_set, batch_sampler=tr_sampler, num_workers=0,
+    train_loader = torch.utils.data.DataLoader(dataset=train_set, batch_sampler=tr_sampler, num_workers=1,
     pin_memory=True, shuffle=False)
     #val_loader = torch.utils.data.DataLoader(dataset=val_set, batch_sampler=val_sampler, num_workers=0,
     #pin_memory=True, shuffle=False)

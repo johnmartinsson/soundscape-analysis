@@ -55,6 +55,17 @@ class ActiveQuerySampler(data.Sampler):
         
         for batch_nr in range(self.n_episodes):
             
+            
+            '''
+            TODO: Check this code over. Instead of always choosing the most 'difficult' sample choose one based on probability based on the entropy of the query.
+                  Are we sure that the data comes back in the same format as for the randomepisode training? This is important.
+                  
+                  -Check format []
+                  -Fix probability sampling based on entropy []
+                  -Flexibility in hyperparameters []
+                  
+            '''
+            
             #Need to do stuff differently from here.
             #Select classes
             #Construct candidate set
@@ -96,6 +107,7 @@ class ActiveQuerySampler(data.Sampler):
             query = []
             i = 0
             while(i < len(q_idx)):
+                #Assuming k_way=10, n_query=5, perhaps fix this.
                 if i + 50 > len(q_idx):
                     break
                 else:

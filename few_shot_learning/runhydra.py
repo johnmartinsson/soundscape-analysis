@@ -5,6 +5,7 @@
 
 import sys
 import pprint
+import random
 import hydra
 from omegaconf import OmegaConf
 import pyaml
@@ -24,7 +25,11 @@ import utils
 @hydra.main(config_path='config', config_name='config')
 def main(cfg):
     """Run experiments."""
-      
+    
+    #This seems to work actually, very nice. Should incorporate the choosing of gpu number all over however.
+    if cfg.experiment.set.device == 'cuda':
+        torch.cuda.set_per_process_memory_fraction(cfg.experiment.set.mem_fraction, 0)
+    
     # Print the configuration - just to make sure that you loaded what you
     # wanted to load
 
@@ -38,10 +43,15 @@ def main(cfg):
     #Make this look pretty somehow
     print(OmegaConf.to_yaml(cfg))
     
+    #torch.use_deterministic_algorithms(True)
+    #torch.backends.cudnn.benchmark = False
+    
     #Perhaps not best way to seed but.
     if cfg.seed != -1:
         torch.manual_seed(cfg.seed)
         np.random.seed(cfg.seed)
+        torch.cuda.manual_seed(cfg.seed)
+        random.seed(cfg.seed)
     
     model = module_model.load(cfg)
     #Should perhaps load different loaders depending on the mode

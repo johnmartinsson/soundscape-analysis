@@ -126,7 +126,7 @@ def prototypical_loss(input, target, n_support, config, semi_input=None, supp_id
     
     #OBS: Super important that the unlabeled queries follows the same format as the labeled right?
     #Is this something that happens at the moment? I'm not entirely sure.
-    log_p_y = F.log_softmax(-dists, dim=1).view(n_classes, n_query, -1)
+    log_p_y = F.log_softmax(-dists/config.experiment.train.s_temp, dim=1).view(n_classes, n_query, -1)
     #shape (20,5,20). If we dont format unlabeled queries as for labeled this is fucked right?
     #print(log_p_y.shape)
     target_inds = torch.arange(0, n_classes)

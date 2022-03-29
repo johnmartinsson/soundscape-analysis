@@ -31,7 +31,7 @@ class Datagen():
             else:
                 self.y = self.labels
             if config.experiment.datagen.balance:
-                self.x, self.y = util.balance_class_distribution(self.x, self.y)
+                self.x, self.y = util.balance_class_distribution(self.x, self.y, config)
             
             if config.experiment.datagen.normalize:
                 self.mean, self.std = util.norm_params(self.x)

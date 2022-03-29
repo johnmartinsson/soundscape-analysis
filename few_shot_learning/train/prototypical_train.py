@@ -6,8 +6,10 @@ from tqdm import tqdm
 import numpy as np
 import utils
 import datasets.semisupervised as semi
+import datasets.semi_augment as semi_augment
 import datasets.semisupervised_lazy as semi_lazy
 import datasets.semisupervised_trainvalcv as semi_trainvalcv
+import datasets.episodicchain as ec
 import datasets.background as background
 import csv
 
@@ -50,6 +52,8 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
     
     num_batches_tr = len(train_loader)
     #num_batches_val = len(val_loader)
+    if config.experiment.train.log_chain:
+        chain_logger = ec.EpisodicChain(config, model, train_loader.dataset)
     
     #As this grows just create a list i think over all diferent active styles
     if config.experiment.train.sampler == 'activequery':
@@ -64,6 +68,9 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
                 semi_iterator = iter(semi_lazy.get_semi_loader(config))
             else:
                 semi_iterator = iter(semi.get_semi_loader(config))
+                
+        if config.experiment.train.semi_augment:
+            semi_augment_loader = iter(semi_augment.get_augment_loader(config, class_map, class_dict, tr_cls_keys, val_cls_keys))
         
     if config.experiment.train.background_other_source:
         background_iterator = iter(background.get_background_loader(config))
@@ -78,6 +85,10 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             freqMask = Transforms.FrequencyMasking(config.experiment.train.freq_mask_range)
     
     #
+    
+    if config.experiment.train.save_init_state:
+        random_init_state = model.state_dict()
+        torch.save(random_init_state, 'random_init.pth')
     
     #Mark TrainValCV
     
@@ -98,6 +109,12 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             model.train()
             
             x, y = batch
+            
+            #Can we simply do like this?
+            if config.experiment.train.rotate:
+                if np.random.random() > 0.5:
+                    x = torch.transpose(x, 1, 2)
+                    
             
             semi_x = None
             
@@ -195,37 +212,138 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
                 '''
                 
                 if config.experiment.train.semi_augment:
-                    pass
-                
+                    #Just do something here for now, might wanna check into this more later on. Like what happens if we use all for example.
+                    
+                    
+                    num_unlabeled = config.experiment.train.n_shot + config.experiment.train.n_query
+                    num_semi = int(len(semi_x)/num_unlabeled)
+                    num_augment = int(min(np.random.poisson(lam=int((num_semi)/5)), num_unlabeled))
+                    to_augment = np.random.choice(list(range(num_semi)), num_augment, replace=False)
+                    
+                    
+                    for i in to_augment:
+                        
+                        samples = next(semi_augment_loader)
+                        for j in range(len(samples)):
+
+                            if config.experiment.train.semi_augment_ediff:
+                                E_x = torch.sum(semi_x[i*num_unlabeled+j]**2).item()
+                                E_s = torch.sum(samples[j]**2).item()
+                                E_diff = E_x/E_s
+                            else:
+                                E_diff = 1
+                            if config.experiment.train.semi_augment_rw:
+                                l = np.random.uniform(low=0.2, high=0.8)
+                                w_x = l
+                                w_s = 1 - l
+                            else:
+                                w_x = 0.5
+                                w_s = 0.5
+                            #TODO: Introduce some energy checking / matching here possibly.
+                            semi_x[i*num_unlabeled+j] = w_x*semi_x[i*num_unlabeled+j] + w_s*E_diff*samples[j]
+                            
+                    if config.experiment.train.semi_augment_fl and num_augment != 0:
+                        
+                        semi_x = semi_x.numpy()
+                        
+                        tmp = []
+                        to_delete = []
+                        
+                        for ix in to_augment:
+                            to_delete.append(list(range(ix*num_unlabeled, ix*num_unlabeled+num_unlabeled)))
+                            tmp.append(semi_x[ix*num_unlabeled:ix*num_unlabeled+num_unlabeled].copy())
+                        
+                        #shape (num_augment, num_unlabeled, frames, bins)
+                        to_delete = np.array(to_delete)
+                        to_delete = to_delete.reshape(-1)
+                        tmp = np.array(tmp)
+                        
+                        semi_x = np.delete(semi_x, to_delete, 0)
+                        semi_x = torch.tensor(semi_x)
+                        
+                        #Now to actually insert the augmented unlabeled samples into the labeled data and labels.
+                        x = x.numpy()
+                        y = y.numpy()
+                        
+                        num_samples = num_unlabeled
+                        for i in range(num_augment):
+                            
+                            ix = [(config.experiment.train.k_way+i) * (j+1) for j in range(num_samples)]
+                            x = np.insert(x, ix, tmp[i], axis=0)
+                            y = np.insert(y, ix, 100+i, axis=0)
+                            
+                        x = torch.tensor(x)
+                        y = torch.tensor(y)
+                        
+                        
+                        
                 if config.experiment.train.specaugment:
+                    if config.experiment.train.specaugment_prototypes:
+                        ix = np.array(list(range(len(semi_x))))
+                    else:
+                        n_shot = config.experiment.train.n_shot
+                        n_query = config.experiment.train.n_query
+                        n_samples = n_shot + n_query
+                        tmp = [list(range(i*n_samples+n_shot, i*n_samples+n_samples)) for i in range(int(len(semi_x)/n_samples))]
+                        ix = []
+                        for l in tmp:
+                            for e in l:
+                                ix.append(e)
+                        ix = np.array(ix)
+                    
+                    #Turn in to (batchsize, mel_bins, time_frames)
                     semi_x = torch.transpose(semi_x, 1, 2)
                     time_stretch_range = config.experiment.train.time_stretch_range
                     stretch_factor = 1 + np.random.uniform(-time_stretch_range, time_stretch_range)
-                    semi_x = timeStretch(semi_x.type(torch.complex64), stretch_factor).type(torch.float)
+                    if config.experiment.train.specaugment_timestretch:
+                        semi_x = timeStretch(semi_x.type(torch.complex64), stretch_factor).type(torch.float)
                     if config.experiment.train.specaugment_iid_filters:
                         semi_x = semi_x.reshape(semi_x.shape[0], 1, semi_x.shape[1], semi_x.shape[2])
-                    semi_x = freqMask(timeMask(semi_x))
+                    
+                    '''
+                    I think we currently let both the samples meant for prototype/query be time stretched as to make this change easier to start.
+                    However, do no 
+                    '''
+                    
+                    semi_x[ix] = freqMask(timeMask(semi_x[ix]))
                     if config.experiment.train.specaugment_iid_filters:
                         semi_x = semi_x.squeeze()
                     semi_x = torch.transpose(semi_x, 1, 2)
                 semi_x = semi_x.to(device, dtype=torch.float)
-                semi_x = model(semi_x)
+                if config.experiment.train.multi:
+                    semi_x = model(semi_x)
+                else:
+                    semi_x = model(semi_x)
             
             #Give more control over what from specaugment we want to use I think.
+           # print(y)
             if config.experiment.train.specaugment:
+                '''
+                OBS: Order of samples no the same for the labeled data need some attention on this!
+                     This should be simple though, just split it in half.
+                '''
+                if config.experiment.train.specaugment_prototypes:
+                    ix = np.array(list(range(len(x))))
+                else:
+                    ix = np.array(list(range(config.experiment.train.n_shot*config.experiment.train.k_way, len(x))))
+                
                 x = torch.transpose(x, 1, 2)
                 time_stretch_range = config.experiment.train.time_stretch_range
                 stretch_factor = 1 + np.random.uniform(-time_stretch_range, time_stretch_range)
-                x = timeStretch(x.type(torch.complex64), stretch_factor).type(torch.float)
+                if config.experiment.train.specaugment_timestretch:
+                    x = timeStretch(x.type(torch.complex64), stretch_factor).type(torch.float)
                 if config.experiment.train.specaugment_iid_filters:
                     x = x.reshape(x.shape[0], 1, x.shape[1], x.shape[2])
-                x = freqMask(timeMask(x))
+                x[ix] = freqMask(timeMask(x[ix]))
                 if config.experiment.train.specaugment_iid_filters:
                     x = x.squeeze()
                 x = torch.transpose(x, 1, 2)
             x = x.to(device)
             y = y.to(device)
-            x_out = model(x)
+            if config.experiment.train.multi:
+                x_out = model(x)
+            else:
+                x_out = model(x)
             
             if config.experiment.train.embedding_propagation:
                 x_out = torch.mm(global_consistency(get_similarity_matrix(x_out, 1), alpha=0.5), x_out)
@@ -236,6 +354,16 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
 
             tr_loss.backward()
             optim.step()
+            
+            '''
+            Engage episodic logger here
+            '''
+            if config.experiment.train.log_chain:
+                chain_logger.log_episode(y, x_out)
+            
+            if config.experiment.train.save_first_batch_state:
+                first_back_state = model.state_dict()
+                torch.save(first_back_state, 'first_back.pth')
             
         avg_loss_tr = np.mean(train_loss[-num_batches_tr:])
         avg_acc_tr = np.mean(train_acc[-num_batches_tr:])
@@ -259,6 +387,16 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
             scores = val_function(model, None, config, None, class_map, class_dict, tr_cls_keys, val_cls_keys, fold, 'VAL')
         else:
             scores = val_function(model, None, config, None, 'VAL')
+            
+        if config.experiment.train.eval_test:
+            test_scores = val_function(model, None, config, None, 'TEST')
+            writer.add_scalar('Fmeasure_te/test', test_scores['fmeasure (percentage)'], epoch)
+            writer.add_scalar('precision_te/test', test_scores['precision'], epoch)
+            writer.add_scalar('recall_te/test', test_scores['recall'], epoch)
+            
+        #Save every epoch  
+        if config.experiment.train.log_chain:
+            chain_logger.save_chain(scores)
         
         writer.add_scalar('Fmeasure/val', scores['fmeasure (percentage)'], epoch)
         writer.add_scalar('precision/val', scores['precision'], epoch)
@@ -299,7 +437,9 @@ def train(model, optimizer, loss_function, train_loader, val_loader, config, wri
         
     torch.save(model.state_dict(),last_model_path)
 
+
     return best_val_fmeasure, model, best_state
+
 
 '''
 Embedding propagation code.
